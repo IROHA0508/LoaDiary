@@ -205,3 +205,15 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+
+# Python 가상환경 (이름 변경 반영)
+loadiaryenv/
+
+# Node
+node_modules/
+dist/
+
+# 환경변수 (API 키, DB 비밀번호)
+.env
+.env.local
