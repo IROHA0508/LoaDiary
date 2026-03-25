@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { useUser } from "../hooks/useUser";
+import { useUser } from "../../hooks/useUser";
 
 /* ─────────────────────────────────────────────
    난이도 색상 (RaidNewPage와 동일)
