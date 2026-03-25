@@ -107,7 +107,34 @@ async def get_joined_raids(fingerprint: str):
 
     return raid_result.data
 
+# 단일 레이드 조회
+@router.get("/{raid_id}", response_model=RaidResponse)
+async def get_raid(raid_id: str):
+  result = (
+    supabase.table("raids")
+    .select("*")
+    .eq("id", raid_id)
+    .execute()
+  )
 
+  if not result.data:
+    raise HTTPException(status_code=404, detail="레이드를 찾을 수 없습니다.")
+
+  return result.data[0]
+
+# 슬롯에서 캐릭터 제거
+@router.delete("/slots/{slot_id}", status_code=204)
+async def remove_slot(slot_id: str):
+  result = (
+    supabase.table("raid_slots")
+    .delete()
+    .eq("id", slot_id)
+    .execute()
+  )
+
+  if not result.data:
+    raise HTTPException(status_code=404, detail="슬롯을 찾을 수 없습니다.")
+  
 # 레이드 삭제
 @router.delete("/{raid_id}", status_code=204)
 async def delete_raid(raid_id: str):
@@ -171,16 +198,3 @@ async def add_slot(raid_id: str, payload: RaidSlotCreate):
     raise HTTPException(status_code=500, detail="슬롯 추가에 실패했습니다.")
 
   return result.data[0]
-
-# 슬롯에서 캐릭터 제거
-@router.delete("/slots/{slot_id}", status_code=204)
-async def remove_slot(slot_id: str):
-  result = (
-    supabase.table("raid_slots")
-    .delete()
-    .eq("id", slot_id)
-    .execute()
-  )
-
-  if not result.data:
-    raise HTTPException(status_code=404, detail="슬롯을 찾을 수 없습니다.")

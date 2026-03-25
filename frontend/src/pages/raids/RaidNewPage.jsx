@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom"
 
 /* ─────────────────────────────────────────────
    카테고리
@@ -205,6 +206,7 @@ const DIFF_COLORS = {
    Main Component
    ───────────────────────────────────────────── */
 export default function RaidNewPage() {
+  const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [form, setForm] = useState({
@@ -851,7 +853,7 @@ export default function RaidNewPage() {
                   cursor: "pointer",
                 }}
                 onClick={() => {
-                  window.location.href = `/raids/${submitResult.data?.id || ""}`;
+                  navigate(`/raids/${submitResult.data?.id}`)
                 }}
               >
                 레이드로 이동 →

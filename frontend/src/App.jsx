@@ -16,6 +16,7 @@ import { getUser } from './api/users'
 import OnboardingPage from './pages/OnboardingPage'
 import MainPage from './pages/MainPage'
 import RaidNewPage from './pages/raids/RaidNewPage'
+import RaidDetailPage from './pages/raids/RaidDetailPage'
 
 // QueryClient 인스턴스 생성
 const queryClient = new QueryClient()
@@ -62,6 +63,9 @@ function AppRoutes(){
       {/* path="/onboarding" : /onboarding URL일 때 OnboardingPage 표시 */}
       <Route path="/onboarding" element={<OnboardingPage />} />
       <Route path="/raids/new" element={<RaidNewPage />} />
+
+      {/* path="/raids/:id" : 레이드 상세 및 파티 배치 페이지 */}
+      <Route path="/raids/:id" element={<RaidDetailPage />} />
 
       {/* path="*" : 위에서 매칭되지 않은 모든 URL (ex. /asdfgh) */}
       {/* Navigate to="/" : 메인 페이지로 리다이렉트 */}
