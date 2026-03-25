@@ -1,121 +1,83 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import { useEffect } from 'react'
+// BrowserRouter : 전체 앱을 감싸는 라우터 컨테이너, URL 변경을 감지해서 맞는 페이지를 보여줌
+// Routes : Route들을 감싸는 컨테이너
+// Route : URL 경로와 컴포넌트를 연결
+// Navigate : 특정 경로로 강제 이동시키는 컴포넌트
+// useNavigate : 코드에서 페이지 이동할 때 쓰는 훅
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 
-function App() {
-  const [count, setCount] = useState(0)
+// QueryClient : TanStack Query의 캐시와 설정을 관리하는 객체
+// QueryClientProvider : 앱 전체에서 useQuery를 쓸 수 있게 감싸주는 컴포넌트. Python의 전역 설정 객체와 비슷한 개념
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { useUser } from './hooks/useUser'
+import { getUser } from './api/users'
+
+// export default로 내보낸 컴포넌트는 중괄호 없이 import 가능
+import OnboardingPage from './pages/OnboardingPage'
+import MainPage from './pages/MainPage'
+
+// QueryClient 인스턴스 생성
+const queryClient = new QueryClient()
+
+// 라우트 가드 역할 컴포넌트
+function AppRoutes(){
+  const {fingerprint, loading} = useUser()
+  const navigate = useNavigate()
+
+
+  // fingerprint, loading 값이 바뀔 때 마다 실행
+  useEffect(() => {
+    // fingerprint가 없으면 아무것도 안함
+    if (loading || !fingerprint) return
+
+    const checkUser = async () => {
+      // 유저가 있으면 현재 페이지 유지
+      try{
+        await getUser(fingerprint)
+      } 
+      // 유저가 없으면 온보딩 페이지로 이동 (404 에러 발생)      
+      catch{
+        navigate('/onboarding')
+      }
+    }
+
+    checkUser()
+  }, [fingerprint, loading])
+
+  // fingerprint 준비중일 때 로딩 화면 표시
+  if (loading){
+    return(
+      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+        <p className="text-gray-500">로딩 중...</p>
+      </div>
+    )
+  }
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+    <Routes>
+      {/* path="/" : 메인 URL일 때 MainPage 컴포넌트 표시 */}
+      <Route path="/" element={<MainPage />} />
 
-      <div className="ticks"></div>
+      {/* path="/onboarding" : /onboarding URL일 때 OnboardingPage 표시 */}
+      <Route path="/onboarding" element={<OnboardingPage />} />
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+      {/* path="*" : 위에서 매칭되지 않은 모든 URL (ex. /asdfgh) */}
+      {/* Navigate to="/" : 메인 페이지로 리다이렉트 */}
+      {/* replace : 뒤로가기 시 잘못된 URL로 돌아가지 않도록 히스토리 교체 */}
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   )
 }
 
-export default App
+export default function App() {
+  // 앱 전체를 QueryClientProvider로 감싸야 useQuery 사용 가능
+  return (
+    <QueryClientProvider client={queryClient}>
+
+      {/* 앱 전체를 BrowserRouter로 감싸야 useNavigate, Route 사용 가능 */}
+      <BrowserRouter>
+        <AppRoutes />
+      </BrowserRouter>
+    </QueryClientProvider>
+  )
+}
