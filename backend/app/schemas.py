@@ -55,6 +55,7 @@ class CharacterResponse(BaseModel):
 
 class RaidCreate(BaseModel):
   # group_code: str
+  raid_id: str
   raid_name: str
   difficulty: str
   max_slots: int = Field(ge=1, le=16)   # 슬롯 수를 1~16사이로 제한하는 유효성검사
@@ -64,6 +65,7 @@ class RaidCreate(BaseModel):
 class RaidResponse(BaseModel):
   id: str
   # group_code: str
+  raid_id: str
   raid_name: str
   difficulty: str
   max_slots: int

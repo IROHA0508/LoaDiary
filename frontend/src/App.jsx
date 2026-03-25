@@ -15,6 +15,7 @@ import { getUser } from './api/users'
 // export default로 내보낸 컴포넌트는 중괄호 없이 import 가능
 import OnboardingPage from './pages/OnboardingPage'
 import MainPage from './pages/MainPage'
+import RaidNewPage from './pages/raids/RaidNewPage'
 
 // QueryClient 인스턴스 생성
 const queryClient = new QueryClient()
@@ -60,6 +61,7 @@ function AppRoutes(){
 
       {/* path="/onboarding" : /onboarding URL일 때 OnboardingPage 표시 */}
       <Route path="/onboarding" element={<OnboardingPage />} />
+      <Route path="/raids/new" element={<RaidNewPage />} />
 
       {/* path="*" : 위에서 매칭되지 않은 모든 URL (ex. /asdfgh) */}
       {/* Navigate to="/" : 메인 페이지로 리다이렉트 */}
