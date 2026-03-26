@@ -17,6 +17,9 @@ import OnboardingPage from './pages/OnboardingPage'
 import MainPage from './pages/MainPage'
 import RaidNewPage from './pages/raids/RaidNewPage'
 import RaidDetailPage from './pages/raids/RaidDetailPage'
+import RankingPage from './pages/headers/RankingPage'
+import MarketPage from './pages/headers/MarketPage'
+import MerchantPage from './pages/headers/MerchantPage'
 
 // QueryClient 인스턴스 생성
 const queryClient = new QueryClient()
@@ -67,6 +70,10 @@ function AppRoutes(){
       {/* path="/raids/:id" : 레이드 상세 및 파티 배치 페이지 */}
       <Route path="/raids/:id" element={<RaidDetailPage />} />
 
+      {/* 헤더에 있는 랭킹, 거래소, 떠돌이 상인 페이지 */}
+      <Route path="/ranking" element={<RankingPage />} />
+      <Route path="/market" element={<MarketPage />} />
+      <Route path="/merchants" element={<MerchantPage />} />
       {/* path="*" : 위에서 매칭되지 않은 모든 URL (ex. /asdfgh) */}
       {/* Navigate to="/" : 메인 페이지로 리다이렉트 */}
       {/* replace : 뒤로가기 시 잘못된 URL로 돌아가지 않도록 히스토리 교체 */}

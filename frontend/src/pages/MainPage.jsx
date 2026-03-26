@@ -86,7 +86,7 @@ export default function MainPage() {
             <button
               key={item.path}
               onClick={() => navigate(item.path)}
-              className="px-4 py-2 text-sm text-gray-300 hover:text-white hover:bg-gray-800 rounded-lg transition-colors"
+              className="px-4 py-2 text-base font-semibold text-gray-300 hover:text-white hover:bg-gray-800 rounded-lg"
             >
               {item.label}
             </button>
@@ -163,59 +163,48 @@ export default function MainPage() {
         <section>
           <h2 className="text-lg font-semibold mb-4 text-gray-200">내 레이드</h2>
 
-          {raidLoading ? (
-            <p className="text-gray-500">불러오는 중...</p>
-          ) : raids.length === 0 ? (
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-8 text-center">
-              <p className="text-gray-500">참여 중인 레이드가 없습니다.</p>
-              <button
-                onClick={() => navigate('/raids/new')}
-                className="mt-4 text-blue-400 hover:text-blue-300 text-sm"
-              >
-                첫 레이드 만들기 →
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {raids.map((raid) => (
-                <div
-                  key={raid.id}
-                  // 카드 전체 클릭 시 상세 페이지로 이동
-                  onClick={() => navigate(`/raids/${raid.id}`)}
-                  className="bg-gray-900 border border-gray-800 rounded-xl p-5 flex items-center justify-between hover:border-gray-600 transition-colors cursor-pointer group"
-                  // group : 자식 요소에서 'group-hover:' 클래스를 쓸 수 있게 해주는 Tailwind 기능
+          <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+            {raidLoading ? (
+              <p className="text-gray-500">불러오는 중...</p>
+            ) : raids.length === 0 ? (
+              <div className="text-center py-6">
+                <p className="text-gray-500">참여 중인 레이드가 없습니다.</p>
+                <button
+                  onClick={() => navigate('/raids/new')}
+                  className="mt-4 text-blue-400 hover:text-blue-300 text-sm"
                 >
-                  {/* 레이드 정보 */}
-                  <div>
-                    <p className="font-semibold">{raid.raid_name}</p>
-                    <p className="text-sm text-gray-400 mt-1">
-                      {raid.difficulty} · 최대 {raid.max_slots}명
-                    </p>
-                  </div>
+                  레이드 추가하기
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {raids.map((raid) => (
+                  <div
+                    key={raid.id}
+                    onClick={() => navigate(`/raids/${raid.id}`)}
+                    className="border border-gray-800 rounded-xl p-5 flex items-center justify-between hover:border-gray-600 transition-colors cursor-pointer"
+                  >
+                    <div>
+                      <p className="font-semibold">{raid.raid_name}</p>
+                      <p className="text-sm text-gray-400 mt-1">
+                        {raid.difficulty} · 최대 {raid.max_slots}명
+                      </p>
+                    </div>
 
-                  {/* 오른쪽: 날짜 + 삭제 버튼 */}
-                  <div className="flex items-center gap-4">
-                    {/* <span className="text-gray-500 text-sm">
-                      {new Date(raid.created_at).toLocaleDateString('ko-KR')}
-                    </span> */}
-
-                    {/* 삭제 버튼 */}
-                    {/* stopPropagation : 버튼 클릭 이벤트가 부모(카드)로 전파되는 것을 막음 */}
-                    {/* 막지 않으면 삭제 버튼을 눌렀을 때 상세 페이지로도 이동해버림 */}
                     <button
                       onClick={(e) => {
                         e.stopPropagation()
                         setRaidToDelete(raid)
                       }}
-                      className="text-gray-500 hover:text-red-400 transition-colors text-sm px-2 py-1 rounded hover:bg-red-400/10"
+                      className="text-gray-500 hover:text-red-400 text-sm px-2 py-1 rounded hover:bg-red-400/10"
                     >
                       삭제
                     </button>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
+                ))}
+              </div>
+            )}
+          </div>
         </section>
       </main>
 
