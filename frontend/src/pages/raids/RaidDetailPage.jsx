@@ -109,6 +109,7 @@ export default function RaidDetailPage() {
   const [dragSlotId, setDragSlotId] = useState(null); // 드래그 중인 슬롯 id (슬롯→슬롯 이동용)
   const [toastMsg, setToastMsg] = useState(null);
   const toastTimer = useRef(null);
+  const columnsRef = useRef(null);
   const [searchInput, setSearchInput] = useState("");
   const [searchState, setSearchState] = useState(null); // null | "loading" | "done" | "error"
   const [searchError, setSearchError] = useState("");
@@ -259,37 +260,6 @@ export default function RaidDetailPage() {
     }
   };
 
-  // 좌클릭 시 첫 번째 빈 슬롯에 자동 배치
-  const onCharClick = async (charId) => {
-    if (!isDraggable(charId)) return;
-
-    // 전체 슬롯 순서 목록에서 비어있는 첫 번째 슬롯 찾기
-    const totalSlots = raid.max_slots;
-    let emptySlotOrder = null;
-    for (let i = 0; i < totalSlots; i++) {
-      if (!slots.find((s) => s.slot_order === i)) {
-        emptySlotOrder = i;
-        break;
-      }
-    }
-
-    if (emptySlotOrder === null) {
-      showToast("빈 슬롯이 없습니다.");
-      return;
-    }
-
-    try {
-      const newSlot = await API.addSlot(raidId, {
-        character_id: charId,
-        slot_order: emptySlotOrder,
-        role: null,
-      });
-      setSlots((prev) => [...prev, newSlot]);
-    } catch (e) {
-      showToast(e.message);
-    }
-  };
-
   /* ── 유저 추가 / 제거 ───────────────────────── */
   const handleAddMember = async () => {
     const name = searchInput.trim();
@@ -384,7 +354,7 @@ export default function RaidDetailPage() {
         ::-webkit-scrollbar { width:4px; height:4px; }
         ::-webkit-scrollbar-thumb { background:rgba(100,116,139,0.3); border-radius:2px; }
         .slot-drop:hover { border-color: rgba(245,158,11,0.4) !important; }
-        .member-search-input::placeholder { color: #334155; }
+        .member-search-input::placeholder { color: #64748b; }
         .member-search-input:focus { border-color: rgba(245,158,11,0.4) !important; outline: none; }
       `}</style>
 
@@ -404,6 +374,12 @@ export default function RaidDetailPage() {
             </div>
           </div>
           <div style={styles.deleteBtnWrap}>
+            <div
+              style={styles.doneBtn}
+              onClick={() => navigate("/")}
+            >
+              ✓ 배치 완료
+            </div>
             <div
               style={styles.deleteBtn}
               onClick={async () => {
@@ -475,7 +451,7 @@ export default function RaidDetailPage() {
           {/* ── 캐릭터 패널 ──────────────────────── */}
           <div style={styles.charPanel}>
 
-            {/* 유저 추가 영역 */}
+            {/* 유저 추가 */}
             <div style={styles.addMemberBox}>
               <div style={styles.sectionLabel}>유저 추가</div>
               <div style={styles.searchRow}>
@@ -507,46 +483,62 @@ export default function RaidDetailPage() {
               )}
             </div>
 
+            {/* 힌트 — 유저 추가와 원정대 사이 */}
             <div style={styles.charHint}>클릭/드래그로 배치 · 우클릭으로 제거</div>
 
-            <div style={styles.charList}>
-              {/* 내 캐릭터 */}
-              <div style={styles.charGroupLabel}>내 캐릭터</div>
-              {myCharacters.length === 0 ? (
-                <div style={styles.emptyChars}>등록된 캐릭터가 없습니다</div>
-              ) : (
-                myCharacters.map((char) => {
-                  const placed = isCharPlaced(char.id);
-                  const userPlaced = isUserAlreadyPlaced(char.id);
-                  const draggable = isDraggable(char.id);
-                  const disabled = placed || userPlaced;
-                  return (
-                    <div
-                      key={char.id}
-                      draggable={draggable}
-                      onDragStart={(e) => draggable && onCharDragStart(e, char.id)}
-                      onClick={() => onCharClick(char.id)}
-                      style={styles.charCard(disabled)}
-                      title={placed ? "이미 배치됨" : userPlaced ? "같은 원정대 캐릭터가 배치됨" : "클릭 또는 드래그해서 배치"}
-                    >
-                      <div style={styles.charCardLeft}>
-                        <div style={styles.charName}>{char.name}</div>
-                        <div style={styles.charClass}>{char.class_name}</div>
-                      </div>
-                      <div style={styles.charLevel}>
-                        {char.item_level?.toLocaleString() ?? "-"}
-                      </div>
-                      {placed && <div style={styles.placedBadge}>배치됨</div>}
-                      {!placed && userPlaced && <div style={{ ...styles.placedBadge, color: "#ef4444" }}>배치 불가</div>}
-                    </div>
-                  );
-                })
-              )}
+            {/* 수평 스크롤 원정대 컬럼들 */}
+            <div style={{ position: "relative" }}>
+              <div
+                style={styles.scrollBtn("left")}
+                onClick={() => columnsRef.current?.scrollBy({ left: -240, behavior: "smooth" })}
+              >
+                <svg width="10" height="16" viewBox="0 0 10 16" fill="none">
+                  <path d="M8 2L2 8L8 14" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </div>
+              <div style={styles.charColumnsRow} ref={columnsRef}>
 
-              {/* 멤버별 캐릭터 */}
+              {/* 내 원정대 */}
+              <div style={styles.charColumn}>
+                <div style={styles.charColumnHeader}>
+                  <div style={styles.charGroupLabel}>내 원정대</div>
+                </div>
+                {myCharacters.length === 0 ? (
+                  <div style={styles.emptyChars}>캐릭터 없음</div>
+                ) : (
+                  myCharacters.map((char) => {
+                    const placed = isCharPlaced(char.id);
+                    const userPlaced = isUserAlreadyPlaced(char.id);
+                    const draggable = isDraggable(char.id);
+                    const disabled = placed || userPlaced;
+                    return (
+                      <div
+                        key={char.id}
+                        draggable={draggable}
+                        onDragStart={(e) => draggable && onCharDragStart(e, char.id)}
+                        onClick={() => onCharClick(char.id)}
+                        style={styles.charCard(disabled)}
+                        title={placed ? "이미 배치됨" : userPlaced ? "같은 원정대 캐릭터가 배치됨" : "클릭 또는 드래그해서 배치"}
+                      >
+                        <div style={styles.charCardLeft}>
+                          <div style={styles.charName}>{char.name}</div>
+                          <div style={styles.charClass}>{char.class_name}</div>
+                        </div>
+                        <div style={styles.charLevel}>
+                          {char.item_level?.toLocaleString() ?? "-"}
+                        </div>
+                        {placed && <div style={styles.placedBadge}>배치됨</div>}
+                        {!placed && userPlaced && <div style={{ ...styles.placedBadge, color: "#ef4444" }}>배치 불가</div>}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* 멤버별 원정대 컬럼 */}
               {members.map((member) => (
-                <div key={member.user_id}>
-                  <div style={styles.memberHeader}>
+                <div key={member.user_id} style={styles.charColumn}>
+                  <div style={styles.charColumnHeader}>
                     <div style={styles.charGroupLabel}>{member.representative}</div>
                     <div
                       style={styles.removeMemberBtn}
@@ -588,6 +580,15 @@ export default function RaidDetailPage() {
                   )}
                 </div>
               ))}
+            </div>
+              <div
+                style={styles.scrollBtn("right")}
+                onClick={() => columnsRef.current?.scrollBy({ left: 240, behavior: "smooth" })}
+              >
+                <svg width="10" height="16" viewBox="0 0 10 16" fill="none">
+                  <path d="M2 2L8 8L2 14" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </div>
             </div>
           </div>
         </div>
@@ -686,9 +687,19 @@ const styles = {
   },
   headerMeta: {
     fontSize: 12,
-    color: "#475569",
+    color: "#94a3b8",
   },
-  deleteBtnWrap: { display: "flex", justifyContent: "flex-end", minWidth: 60 },
+  deleteBtnWrap: { display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 8, minWidth: 140 },
+  doneBtn: {
+    fontSize: 12,
+    color: "#0f172a",
+    cursor: "pointer",
+    padding: "6px 14px",
+    borderRadius: 8,
+    background: "linear-gradient(135deg, #f59e0b, #f97316)",
+    fontWeight: 700,
+    transition: "all 0.2s",
+  },
   deleteBtn: {
     fontSize: 12,
     color: "#ef4444",
@@ -701,22 +712,22 @@ const styles = {
   // 레이아웃
   layout: {
     display: "flex",
-    gap: 20,
-    padding: "24px 28px",
+    flexDirection: "column",
+    gap: 24,
+    padding: "24px 40px",
+    width: "100%",
     maxWidth: 1100,
     margin: "0 auto",
-    alignItems: "flex-start",
-    flexWrap: "wrap",
+    boxSizing: "border-box",
   },
   // 파티 보드
   boardWrap: {
-    flex: "1 1 560px",
-    minWidth: 0,
+    width: "100%",
   },
   sectionLabel: {
     fontSize: 11,
     fontWeight: 700,
-    color: "#475569",
+    color: "#94a3b8",
     textTransform: "uppercase",
     letterSpacing: "0.08em",
     marginBottom: 14,
@@ -736,7 +747,7 @@ const styles = {
   partyTitle: {
     fontSize: 12,
     fontWeight: 700,
-    color: "#64748b",
+    color: "#94a3b8",
     marginBottom: 12,
     textTransform: "uppercase",
     letterSpacing: "0.06em",
@@ -804,32 +815,71 @@ const styles = {
     fontSize: 10,
     color: "rgba(100,116,139,0.3)",
   },
-  // 캐릭터 패널
+  // 캐릭터 패널 — 유저 추가 박스 + 수평 컬럼들
   charPanel: {
-    width: 220,
-    flexShrink: 0,
-    position: "sticky",
-    top: 80,
+    width: "100%",
   },
   charHint: {
     fontSize: 11,
-    color: "#334155",
-    marginBottom: 12,
+    color: "#64748b",
+    marginTop: 6,
+    marginBottom: 10,
     lineHeight: 1.5,
   },
-  charList: {
+  scrollBtn: (side) => ({
+    position: "absolute",
+    top: "50%",
+    transform: "translateY(-50%)",
+    [side]: -22,
+    zIndex: 10,
+    width: 36,
+    height: 36,
+    borderRadius: "50%",
+    background: "rgba(245,158,11,0.12)",
+    border: "1px solid rgba(245,158,11,0.35)",
+    color: "#f59e0b",
+    fontSize: 22,
+    fontWeight: 400,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    lineHeight: 1,
+    cursor: "pointer",
+    userSelect: "none",
+    transition: "all 0.2s ease",
+  }),
+  // 수평 스크롤 컬럼 컨테이너
+  charColumnsRow: {
+    display: "flex",
+    gap: 10,
+    overflowX: "auto",
+    paddingBottom: 8,
+  },
+  // 각 원정대 컬럼 — 고정 너비 통일
+  charColumn: {
+    width: 220,
+    minWidth: 220,
+    maxWidth: 220,
+    flexShrink: 0,
+    background: "rgba(15,23,42,0.5)",
+    border: "1px solid rgba(248,250,252,0.06)",
+    borderRadius: 12,
+    padding: "12px 10px",
     display: "flex",
     flexDirection: "column",
-    gap: 6,
-    maxHeight: "calc(100vh - 200px)",
+    gap: 4,
+    maxHeight: 680,
     overflowY: "auto",
-    paddingRight: 2,
   },
-  emptyChars: {
-    fontSize: 13,
-    color: "#334155",
-    padding: "20px 0",
-    textAlign: "center",
+  charColumnHeader: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+    paddingBottom: 8,
+    borderBottom: "1px solid rgba(248,250,252,0.06)",
+    flexShrink: 0,
+    minHeight: 28,
   },
   charCard: (placed) => ({
     display: "flex",
@@ -880,11 +930,14 @@ const styles = {
   },
    // 유저 추가 박스
   addMemberBox: {
-    marginBottom: 14,
-    padding: "14px",
+    marginBottom: 8,
+    padding: "14px 16px",
     borderRadius: 12,
     background: "rgba(15,23,42,0.6)",
     border: "1px solid rgba(248,250,252,0.06)",
+    maxWidth: 400,
+    // 피드백 메시지가 표시될 공간을 미리 확보해서 레이아웃 밀림 방지
+    minHeight: 90,
   },
   searchRow: { display: "flex", gap: 6 },
   searchInput: {
@@ -905,6 +958,7 @@ const styles = {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
+    lineHeight: 1,
     borderRadius: 8,
     background: isLoading
       ? "rgba(100,116,139,0.2)"
@@ -922,14 +976,20 @@ const styles = {
     fontWeight: 600,
     color: type === "error" ? "#ef4444" : "#22c55e",
   }),
+  emptyChars: {
+    fontSize: 11,
+    color: "#334155",
+    padding: "8px 0",
+    textAlign: "center",
+  },
   charGroupLabel: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: 700,
-    color: "#475569",
-    textTransform: "uppercase",
-    letterSpacing: "0.06em",
-    marginTop: 10,
-    marginBottom: 6,
+    color: "#f1f5f9",
+    letterSpacing: "0.02em",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
   },
   memberHeader: {
     display: "flex",

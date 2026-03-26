@@ -247,12 +247,18 @@ async def add_member(raid_id: str, payload: RaidMemberCreate, added_by: str):
 
     # 로스트아크 API로 캐릭터 자동 동기화
     raw = await get_characters(payload.representative)
-    if raw:
-      characters = await parse_characters(raw, target_user_id)
-      now = datetime.now(timezone.utc).isoformat()
-      for c in characters:
-        c["updated_at"] = now
-      supabase.table("characters").insert(characters).execute()
+    if not raw:
+      # 캐릭터를 찾을 수 없으면 임시 유저 롤백 후 에러 반환
+      supabase.table("users").delete().eq("id", target_user_id).execute()
+      raise HTTPException(
+        status_code=404,
+        detail=f"'{payload.representative}' 캐릭터를 찾을 수 없습니다. 캐릭터명을 다시 확인해주세요."
+      )
+    characters = await parse_characters(raw, target_user_id)
+    now = datetime.now(timezone.utc).isoformat()
+    for c in characters:
+      c["updated_at"] = now
+    supabase.table("characters").insert(characters).execute()
   else:
     target_user_id = target_result.data[0]["id"]
  
