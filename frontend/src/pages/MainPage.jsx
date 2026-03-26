@@ -1,28 +1,22 @@
-import { useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { getCharacters } from '../api/characters'
-import { getMyRaids } from '../api/raids'
+import { getMyRaids, deleteRaid } from '../api/raids'
 import { useUser } from '../hooks/useUser'
 
 export default function MainPage() {
   const { fingerprint } = useUser()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
 
-  // useQuery 결과 호출
-  // data를 characters 라는 이름으로 가져오고 없으면 기본값으로 []으로 지정
-  // isLoading을 charLoading 이라는 이름으로 꺼냄
+  // 삭제 확인 모달용 상태 - 어떤 레이드를 삭제할지 저장
+  // null이면 모달 닫힘, raid 객체가 들어오면 모달 열림
+  const [raidToDelete, setRaidToDelete] = useState(null)
+
   const { data: characters = [], isLoading: charLoading } = useQuery({
-
-    // queryKey : 이 쿼리의 고유 식별자 (캐시 키)
-    // fingerprint가 바뀌면 자동으로 API를 다시 호출함
     queryKey: ['characters', fingerprint],
-
-    // queryFn : 실제로 실행할 API 호출 함수
     queryFn: () => getCharacters(fingerprint),
-
-    // enabled : false면 API 호출 안 함
-    // !!fingerprint : fingerprint가 null이면 false, 값이 있으면 true
-    // fingerprint가 준비되기 전엔 API 호출하지 않기 위해 사용
     enabled: !!fingerprint,
   })
 
@@ -32,19 +26,95 @@ export default function MainPage() {
     enabled: !!fingerprint,
   })
 
+  // useMutation : 데이터를 변경하는 API 호출 (삭제, 생성, 수정 등)
+  // useQuery는 데이터를 읽기만 하지만, useMutation은 서버 상태를 바꿀 때 사용
+  const deleteMutation = useMutation({
+    mutationFn: (raidId) => deleteRaid(raidId),
+
+    // onSuccess : API 호출이 성공했을 때 실행
+    onSuccess: () => {
+      // invalidateQueries : 해당 쿼리의 캐시를 무효화해서 목록을 다시 불러옴
+      queryClient.invalidateQueries({ queryKey: ['raids', fingerprint] })
+      setRaidToDelete(null)
+    },
+  })
+
+  // 헤더 네비게이션 메뉴 목록
+  // label : 화면에 표시할 텍스트, path : navigate할 경로
+  const navItems = [
+    { label: '랭킹', path: '/ranking' },
+    { label: '거래소', path: '/market' },
+    { label: '떠돌이 상인', path: '/merchants' },
+  ]
+
   return (
     <div className="min-h-screen bg-gray-950 text-white">
 
       {/* 헤더 */}
-      <header className="border-b border-gray-800 px-6 py-4 flex items-center justify-between">
-        <h1 className="text-xl font-bold">⚔️ 로아 일기 ⚔️</h1>
-        <button
-          onClick={() => navigate('/raids/new')}
-          // onClick : 버튼 클릭 시 실행
-          className="bg-blue-600 hover:bg-blue-500 text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
+      <header className="border-b border-gray-800 px-6 py-4 flex items-center gap-8">
+
+        {/* 로고 */}
+        <h1
+          className="text-xl font-bold cursor-pointer shrink-0"
+          onClick={() => navigate('/')}
+          // shrink-0 : flex 컨테이너 안에서 이 요소는 줄어들지 않도록 고정
         >
-          + 레이드 생성
-        </button>
+          ⚔️ 로아 일기 ⚔️
+        </h1>
+
+        {/* 네비게이션 메뉴 - 랭킹, 거래소, 떠돌이 상인 */}
+        <nav className="flex items-center gap-1">
+          {navItems.map((item) => (
+            <button
+              key={item.path}
+              onClick={() => navigate(item.path)}
+              className="px-4 py-2 text-sm text-gray-300 hover:text-white hover:bg-gray-800 rounded-lg transition-colors"
+            >
+              {item.label}
+            </button>
+          ))}
+        </nav>
+
+        {/* 캐릭터 검색 - ml-auto로 오른쪽으로 밀어냄 */}
+        <div className="ml-auto flex items-center gap-3">
+          <div className="flex items-center bg-gray-900 border border-gray-700 rounded-lg overflow-hidden">
+            {/* overflow-hidden : 자식 요소가 둥근 모서리 밖으로 삐져나오지 않도록 */}
+            <input
+              type="text"
+              placeholder="캐릭터 검색"
+              className="bg-transparent px-4 py-2 text-sm text-white placeholder-gray-500 outline-none w-44"
+              // outline-none : 클릭해도 파란 테두리가 생기지 않도록
+              onKeyDown={(e) => {
+                // Enter 키를 누르면 검색 페이지로 이동
+                if (e.key === 'Enter' && e.target.value.trim()) {
+                  navigate(`/search?q=${encodeURIComponent(e.target.value.trim())}`)
+                  // encodeURIComponent : URL에 사용할 수 없는 특수문자를 인코딩
+                  // ex) "달루나르" → "%EB%8B%AC%EB%A3%A8%EB%82%98%EB%A5%B4"
+                }
+              }}
+            />
+            <button
+              onClick={(e) => {
+                // 인풋 값을 가져오기 위해 부모 요소를 통해 input을 찾음
+                const input = e.currentTarget.previousSibling
+                if (input.value.trim()) {
+                  navigate(`/search?q=${encodeURIComponent(input.value.trim())}`)
+                }
+              }}
+              className="px-3 py-2 text-gray-400 hover:text-white hover:bg-gray-700 transition-colors"
+            >
+              🔍
+            </button>
+          </div>
+
+          {/* 레이드 생성 버튼 */}
+          <button
+            onClick={() => navigate('/raids/new')}
+            className="bg-blue-600 hover:bg-blue-500 text-sm font-semibold px-4 py-2 rounded-lg transition-colors shrink-0"
+          >
+            + 레이드 생성
+          </button>
+        </div>
       </header>
 
       <main className="max-w-5xl mx-auto px-6 py-8 space-y-10">
@@ -57,20 +127,10 @@ export default function MainPage() {
             <p className="text-gray-500">불러오는 중...</p>
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-              {/* grid : CSS 그리드 레이아웃 */}
-              {/* grid-cols-2 : 기본 2열, md(중간화면) 3열, lg(큰화면) 4열 */}
-
               {characters.map((char) => (
-                // .map() : 배열을 순회하며 JSX로 변환
-                
                 <div key={char.id} className="bg-gray-900 border border-gray-800 rounded-xl p-4 hover:border-gray-600 transition-colors">
-                {/* key : React가 각 항목을 구분하기 위한 고유값, 반드시 필요 */}
-
-                  {/* truncate : 글자가 넘치면 ... 으로 자름 */}
                   <p className="font-semibold text-white truncate">{char.name}</p>
                   <p className="text-sm text-gray-400 mt-1">{char.class_name}</p>
-                  {/* ?. : 옵셔널 체이닝 - item_level이 null이면 오류 대신 undefined 반환 */}
-                  {/* .toLocaleString() : 숫자에 쉼표 추가 ex) 1620 → 1,620 */}
                   <p className="text-sm text-blue-400 mt-2">Lv. {char.item_level?.toLocaleString()}</p>
                   {char.combat_power && (
                     <p className="text-xs text-gray-500 mt-1">전투력 {char.combat_power?.toLocaleString()}</p>
@@ -88,8 +148,6 @@ export default function MainPage() {
           {raidLoading ? (
             <p className="text-gray-500">불러오는 중...</p>
           ) : raids.length === 0 ? (
-            // 삼항연산자 중첩 : 로딩중? → 레이드 없음? → 레이드 목록 표시
-
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-8 text-center">
               <p className="text-gray-500">아직 생성한 레이드가 없어요.</p>
               <button
@@ -102,22 +160,90 @@ export default function MainPage() {
           ) : (
             <div className="space-y-3">
               {raids.map((raid) => (
-                <div key={raid.id} className="bg-gray-900 border border-gray-800 rounded-xl p-5 flex items-center justify-between hover:border-gray-600 transition-colors cursor-pointer">
+                <div
+                  key={raid.id}
+                  // 카드 전체 클릭 시 상세 페이지로 이동
+                  onClick={() => navigate(`/raids/${raid.id}`)}
+                  className="bg-gray-900 border border-gray-800 rounded-xl p-5 flex items-center justify-between hover:border-gray-600 transition-colors cursor-pointer group"
+                  // group : 자식 요소에서 'group-hover:' 클래스를 쓸 수 있게 해주는 Tailwind 기능
+                >
+                  {/* 레이드 정보 */}
                   <div>
                     <p className="font-semibold">{raid.raid_name}</p>
-                    <p className="text-sm text-gray-400 mt-1">{raid.difficulty} · 최대 {raid.max_slots}명</p>
+                    <p className="text-sm text-gray-400 mt-1">
+                      {raid.difficulty} · 최대 {raid.max_slots}명
+                    </p>
                   </div>
-                  <span className="text-gray-500 text-sm">
-                    {new Date(raid.created_at).toLocaleDateString('ko-KR')}
-                    {/* new Date() : 날짜 문자열을 날짜 객체로 변환 */}
-                    {/* .toLocaleDateString('ko-KR') : 한국 형식으로 변환 ex) 2026. 3. 25. */}
-                  </span>
+
+                  {/* 오른쪽: 날짜 + 삭제 버튼 */}
+                  <div className="flex items-center gap-4">
+                    {/* <span className="text-gray-500 text-sm">
+                      {new Date(raid.created_at).toLocaleDateString('ko-KR')}
+                    </span> */}
+
+                    {/* 삭제 버튼 */}
+                    {/* stopPropagation : 버튼 클릭 이벤트가 부모(카드)로 전파되는 것을 막음 */}
+                    {/* 막지 않으면 삭제 버튼을 눌렀을 때 상세 페이지로도 이동해버림 */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setRaidToDelete(raid)
+                      }}
+                      className="text-gray-500 hover:text-red-400 transition-colors text-sm px-2 py-1 rounded hover:bg-red-400/10"
+                    >
+                      삭제
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
           )}
         </section>
       </main>
+
+      {/* 삭제 확인 모달 */}
+      {/* raidToDelete가 null이 아닐 때만 렌더링 */}
+      {raidToDelete && (
+        // 배경 오버레이 - 클릭하면 모달 닫힘
+        <div
+          className="fixed inset-0 bg-black/60 flex items-center justify-center z-50"
+          // fixed inset-0 : 화면 전체를 덮는 고정 레이어
+          // z-50 : 다른 요소 위에 표시
+          onClick={() => setRaidToDelete(null)}
+        >
+          {/* 모달 본체 - 클릭 이벤트가 오버레이로 전파되지 않도록 막음 */}
+          <div
+            className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-80 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold">레이드 삭제</h3>
+            <p className="text-sm text-gray-400">
+              <span className="text-white font-medium">{raidToDelete.raid_name}</span> 레이드를
+              삭제할까요?<br />이 작업은 되돌릴 수 없어요.
+            </p>
+
+            <div className="flex gap-2 pt-1">
+              {/* 취소 버튼 */}
+              <button
+                onClick={() => setRaidToDelete(null)}
+                className="flex-1 px-4 py-2 text-sm text-gray-300 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                취소
+              </button>
+
+              {/* 삭제 확인 버튼 */}
+              {/* deleteMutation.isPending : API 호출 중이면 true */}
+              <button
+                onClick={() => deleteMutation.mutate(raidToDelete.id)}
+                disabled={deleteMutation.isPending}
+                className="flex-1 px-4 py-2 text-sm font-semibold text-white bg-red-600 hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
+              >
+                {deleteMutation.isPending ? '삭제 중...' : '삭제'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
