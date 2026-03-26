@@ -233,9 +233,17 @@ async def add_member(raid_id: str, payload: RaidMemberCreate, added_by: str):
   )
  
   if not target_result.data:
-    raise HTTPException(status_code=404, detail=f"'{payload.representative}' 캐릭터를 가진 유저를 찾을 수 없습니다.")
- 
-  target_user_id = target_result.data[0]["id"]
+    # 미가입 유저 → fingerprint 없이 임시 유저 생성
+    new_user = (
+      supabase.table("users")
+      .insert({"representative": payload.representative, "fingerprint": None})
+      .execute()
+    )
+    if not new_user.data:
+      raise HTTPException(status_code=500, detail="임시 유저 생성에 실패했습니다.")
+    target_user_id = new_user.data[0]["id"]
+  else:
+    target_user_id = target_result.data[0]["id"]
  
   # 3. 본인을 추가하려는 경우 차단
   if adder_id == target_user_id:

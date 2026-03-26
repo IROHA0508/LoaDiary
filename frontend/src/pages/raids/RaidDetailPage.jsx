@@ -297,6 +297,30 @@ export default function RaidDetailPage() {
   const getSlotAt = (slotOrder) => slots.find((s) => s.slot_order === slotOrder);
   const isCharPlaced = (charId) => slots.some((s) => s.character_id === charId);
 
+  // 같은 유저의 다른 캐릭터가 이미 배치됐는지 체크
+  // myCharacters는 모두 같은 유저(나)의 캐릭터
+  // members의 각 그룹도 동일 유저 캐릭터들
+  const isUserAlreadyPlaced = (charId) => {
+    // 내 캐릭터인지 확인
+    const isMyChar = myCharacters.some((c) => c.id === charId);
+    if (isMyChar) {
+      // 내 캐릭터 중 하나라도 이미 배치됐으면 true
+      return myCharacters.some((c) => c.id !== charId && isCharPlaced(c.id));
+    }
+    // 멤버 캐릭터인지 확인
+    for (const member of members) {
+      const isMemberChar = member.characters.some((c) => c.id === charId);
+      if (isMemberChar) {
+        // 같은 멤버의 다른 캐릭터가 이미 배치됐으면 true
+        return member.characters.some((c) => c.id !== charId && isCharPlaced(c.id));
+      }
+    }
+    return false;
+  };
+
+  // 드래그 불가 여부 (이미 배치됐거나 같은 유저의 캐릭터가 배치됨)
+  const isDraggable = (charId) => !isCharPlaced(charId) && !isUserAlreadyPlaced(charId);
+
   /* ── 로딩 / 에러 ───────────────────────────── */
   if (loading) {
     return (
@@ -340,10 +364,11 @@ export default function RaidDetailPage() {
           <div style={styles.backBtn} onClick={() => navigate("/")}>← 뒤로</div>
           <div style={styles.headerCenter}>
             <div style={styles.raidTitle}>{raid.raid_name}</div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 6 }}>
               <span style={{ ...styles.diffBadge, borderColor: diffColor, color: diffColor }}>
                 {raid.difficulty}
               </span>
+              <span style={styles.headerMeta}>·</span>
               <span style={styles.headerMeta}>{raid.max_slots}인 모집</span>
             </div>
           </div>
@@ -383,8 +408,11 @@ export default function RaidDetailPage() {
                           style={styles.slotCard(!!slot)}
                           onDragOver={(e) => e.preventDefault()}
                           onDrop={(e) => onSlotDrop(e, slotOrder)}
-                          onDoubleClick={() => slot && onRemoveFromSlot(slot.id)}
-                          title={slot ? "더블클릭으로 제거" : "캐릭터를 드래그해서 배치"}
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            slot && onRemoveFromSlot(slot.id);
+                          }}
+                          title={slot ? "우클릭으로 제거" : "캐릭터를 드래그해서 배치"}
                         >
                           {char ? (
                             <div
@@ -448,7 +476,7 @@ export default function RaidDetailPage() {
               )}
             </div>
 
-            <div style={styles.charHint}>드래그해서 슬롯에 배치 · 더블클릭으로 제거</div>
+            <div style={styles.charHint}>드래그해서 슬롯에 배치 · 우클릭으로 제거</div>
 
             <div style={styles.charList}>
               {/* 내 캐릭터 */}
@@ -458,13 +486,16 @@ export default function RaidDetailPage() {
               ) : (
                 myCharacters.map((char) => {
                   const placed = isCharPlaced(char.id);
+                  const userPlaced = isUserAlreadyPlaced(char.id);
+                  const draggable = isDraggable(char.id);
+                  const disabled = placed || userPlaced;
                   return (
                     <div
                       key={char.id}
-                      draggable={!placed}
-                      onDragStart={(e) => !placed && onCharDragStart(e, char.id)}
-                      style={styles.charCard(placed)}
-                      title={placed ? "이미 배치됨" : "드래그해서 배치"}
+                      draggable={draggable}
+                      onDragStart={(e) => draggable && onCharDragStart(e, char.id)}
+                      style={styles.charCard(disabled)}
+                      title={placed ? "이미 배치됨" : userPlaced ? "같은 원정대 캐릭터가 배치됨" : "드래그해서 배치"}
                     >
                       <div style={styles.charCardLeft}>
                         <div style={styles.charName}>{char.name}</div>
@@ -474,6 +505,7 @@ export default function RaidDetailPage() {
                         {char.item_level?.toLocaleString() ?? "-"}
                       </div>
                       {placed && <div style={styles.placedBadge}>배치됨</div>}
+                      {!placed && userPlaced && <div style={{ ...styles.placedBadge, color: "#ef4444" }}>배치 불가</div>}
                     </div>
                   );
                 })
@@ -497,13 +529,16 @@ export default function RaidDetailPage() {
                   ) : (
                     member.characters.map((char) => {
                       const placed = isCharPlaced(char.id);
+                      const userPlaced = isUserAlreadyPlaced(char.id);
+                      const draggable = isDraggable(char.id);
+                      const disabled = placed || userPlaced;
                       return (
                         <div
                           key={char.id}
-                          draggable={!placed}
-                          onDragStart={(e) => !placed && onCharDragStart(e, char.id)}
-                          style={styles.charCard(placed)}
-                          title={placed ? "이미 배치됨" : "드래그해서 배치"}
+                          draggable={draggable}
+                          onDragStart={(e) => draggable && onCharDragStart(e, char.id)}
+                          style={styles.charCard(disabled)}
+                          title={placed ? "이미 배치됨" : userPlaced ? "같은 원정대 캐릭터가 배치됨" : "드래그해서 배치"}
                         >
                           <div style={styles.charCardLeft}>
                             <div style={styles.charName}>{char.name}</div>
@@ -513,6 +548,7 @@ export default function RaidDetailPage() {
                             {char.item_level?.toLocaleString() ?? "-"}
                           </div>
                           {placed && <div style={styles.placedBadge}>배치됨</div>}
+                          {!placed && userPlaced && <div style={{ ...styles.placedBadge, color: "#ef4444" }}>배치 불가</div>}
                         </div>
                       );
                     })

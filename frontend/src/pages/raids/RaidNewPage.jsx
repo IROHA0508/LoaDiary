@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom"
+import { useUser } from "../../hooks/useUser";
 
 /* ─────────────────────────────────────────────
    카테고리
@@ -207,6 +208,7 @@ const DIFF_COLORS = {
    ───────────────────────────────────────────── */
 export default function RaidNewPage() {
   const navigate = useNavigate();
+  const { fingerprint } = useUser();
   const [step, setStep] = useState(1);
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [form, setForm] = useState({
@@ -247,7 +249,7 @@ export default function RaidNewPage() {
   const handleSubmit = async () => {
     setIsSubmitting(true);
     try {
-      const fingerprint = localStorage.getItem("fingerprint") || "unknown";
+      // const fingerprint = localStorage.getItem("fingerprint") || "unknown";
       const res = await fetch("/api/raids/", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -340,9 +342,8 @@ export default function RaidNewPage() {
       gap: 12,
     },
     btnSecondary: {
-      flex: 1,
-      padding: "12px 20px",
-      fontSize: 14,
+      padding: "10px 20px",
+      fontSize: 13,
       fontWeight: 600,
       borderRadius: 10,
       border: "1px solid rgba(248, 250, 252, 0.1)",
@@ -352,9 +353,8 @@ export default function RaidNewPage() {
       transition: "all 0.2s ease",
     },
     btnPrimary: (disabled) => ({
-      flex: 1,
-      padding: "12px 20px",
-      fontSize: 14,
+      padding: "10px 20px",
+      fontSize: 13,
       fontWeight: 700,
       borderRadius: 10,
       border: "none",
@@ -645,7 +645,7 @@ export default function RaidNewPage() {
               <div style={{ minWidth: 0 }}>
                 <div style={styles.raidName}>{raid.name}</div>
                 {raid.tag && <div style={styles.raidTag}>{raid.tag}</div>}
-                <div style={styles.raidMeta}>{raid.gates}관문 · {raid.slots[0]}인</div>
+                <div style={styles.raidMeta}>{raid.gates}관문 · {raid.maxSlots}인</div>
               </div>
             </div>
           ))}
@@ -693,7 +693,7 @@ export default function RaidNewPage() {
                 <div style={{ ...styles.diffLabel, color }}>{diff}</div>
                 {level && (
                   <div style={styles.diffEntryLevel}>
-                    {level.toLocaleString()} ilvl
+                    Lv.{level.toLocaleString()}
                   </div>
                 )}
               </div>
@@ -743,7 +743,7 @@ export default function RaidNewPage() {
 
     // 프리셋: 레이드 최대 인원 기준으로 동적 생성
     const presets = raidMax === 4
-      ? [1, 2, 4]
+      ? [1, 2, 3, 4]
       : raidMax === 8
       ? [4, 8]
       : [4, 8, 16]; // 16인 베히모스
@@ -812,7 +812,7 @@ export default function RaidNewPage() {
                 <div style={styles.partyCount}>
                   {party.filled > 0
                     ? `${party.filled}명`
-                    : <span style={{ color: "#334155" }}>비어있음</span>
+                    : <span style={{ color: "#334155" ,whiteSpace: "nowrap"}}>비어있음</span>
                   }
                 </div>
               </div>
