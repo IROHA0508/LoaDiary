@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useUser } from "../../hooks/useUser";
+import { supabase } from "../../lib/supabase";
 
 /* ─────────────────────────────────────────────
    난이도 색상 (RaidNewPage와 동일)
@@ -101,7 +102,7 @@ export default function RaidDetailPage() {
   const [raid, setRaid] = useState(null);
   const [slots, setSlots] = useState([]); // [{id, character_id, slot_order, role}]
   const [myCharacters, setMyCharacters] = useState([]);
-  const [members, setMembers] = useState([]); // [{user_id, representative, characters}]
+   const [members, setMembers] = useState([]); // [{user_id, representative, characters}]
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [dragCharId, setDragCharId] = useState(null); // 드래그 중인 캐릭터 id
@@ -111,6 +112,53 @@ export default function RaidDetailPage() {
   const [searchInput, setSearchInput] = useState("");
   const [searchState, setSearchState] = useState(null); // null | "loading" | "done" | "error"
   const [searchError, setSearchError] = useState("");
+
+  /* ── Realtime 구독 ──────────────────────────── */
+  useEffect(() => {
+    if (!raidId) return;
+
+    // raid_slots 변경 구독 → 파티 보드 자동 갱신
+    const slotsChannel = supabase
+      .channel(`raid_slots:${raidId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "raid_slots",
+          filter: `raid_id=eq.${raidId}`,
+        },
+        async () => {
+          const updated = await API.getSlots(raidId);
+          setSlots(updated);
+        }
+      )
+      .subscribe();
+
+    // raid_members 변경 구독 → 캐릭터 패널 자동 갱신
+    const membersChannel = supabase
+      .channel(`raid_members:${raidId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "raid_members",
+          filter: `raid_id=eq.${raidId}`,
+        },
+        async () => {
+          const updated = await API.getMembers(raidId);
+          setMembers(updated);
+        }
+      )
+      .subscribe();
+
+    // 컴포넌트 언마운트 시 구독 해제
+    return () => {
+      supabase.removeChannel(slotsChannel);
+      supabase.removeChannel(membersChannel);
+    };
+  }, [raidId]);
 
   /* ── 초기 데이터 로드 ──────────────────────── */
   useEffect(() => {
@@ -277,9 +325,12 @@ export default function RaidDetailPage() {
       <style>{`
         @keyframes fadeIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
         @keyframes toast  { 0%{opacity:0;transform:translateY(8px)} 15%{opacity:1;transform:translateY(0)} 85%{opacity:1} 100%{opacity:0} }
+        @keyframes spin   { to { transform: rotate(360deg); } }
         ::-webkit-scrollbar { width:4px; height:4px; }
         ::-webkit-scrollbar-thumb { background:rgba(100,116,139,0.3); border-radius:2px; }
         .slot-drop:hover { border-color: rgba(245,158,11,0.4) !important; }
+        .member-search-input::placeholder { color: #334155; }
+        .member-search-input:focus { border-color: rgba(245,158,11,0.4) !important; outline: none; }
       `}</style>
 
       <div style={styles.page}>
