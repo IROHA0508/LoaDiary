@@ -259,6 +259,37 @@ export default function RaidDetailPage() {
     }
   };
 
+  // 좌클릭 시 첫 번째 빈 슬롯에 자동 배치
+  const onCharClick = async (charId) => {
+    if (!isDraggable(charId)) return;
+
+    // 전체 슬롯 순서 목록에서 비어있는 첫 번째 슬롯 찾기
+    const totalSlots = raid.max_slots;
+    let emptySlotOrder = null;
+    for (let i = 0; i < totalSlots; i++) {
+      if (!slots.find((s) => s.slot_order === i)) {
+        emptySlotOrder = i;
+        break;
+      }
+    }
+
+    if (emptySlotOrder === null) {
+      showToast("빈 슬롯이 없습니다.");
+      return;
+    }
+
+    try {
+      const newSlot = await API.addSlot(raidId, {
+        character_id: charId,
+        slot_order: emptySlotOrder,
+        role: null,
+      });
+      setSlots((prev) => [...prev, newSlot]);
+    } catch (e) {
+      showToast(e.message);
+    }
+  };
+
   /* ── 유저 추가 / 제거 ───────────────────────── */
   const handleAddMember = async () => {
     const name = searchInput.trim();
@@ -476,7 +507,7 @@ export default function RaidDetailPage() {
               )}
             </div>
 
-            <div style={styles.charHint}>드래그해서 슬롯에 배치 · 우클릭으로 제거</div>
+            <div style={styles.charHint}>클릭/드래그로 배치 · 우클릭으로 제거</div>
 
             <div style={styles.charList}>
               {/* 내 캐릭터 */}
@@ -494,8 +525,9 @@ export default function RaidDetailPage() {
                       key={char.id}
                       draggable={draggable}
                       onDragStart={(e) => draggable && onCharDragStart(e, char.id)}
+                      onClick={() => onCharClick(char.id)}
                       style={styles.charCard(disabled)}
-                      title={placed ? "이미 배치됨" : userPlaced ? "같은 원정대 캐릭터가 배치됨" : "드래그해서 배치"}
+                      title={placed ? "이미 배치됨" : userPlaced ? "같은 원정대 캐릭터가 배치됨" : "클릭 또는 드래그해서 배치"}
                     >
                       <div style={styles.charCardLeft}>
                         <div style={styles.charName}>{char.name}</div>
@@ -537,8 +569,9 @@ export default function RaidDetailPage() {
                           key={char.id}
                           draggable={draggable}
                           onDragStart={(e) => draggable && onCharDragStart(e, char.id)}
+                          onClick={() => onCharClick(char.id)}
                           style={styles.charCard(disabled)}
-                          title={placed ? "이미 배치됨" : userPlaced ? "같은 원정대 캐릭터가 배치됨" : "드래그해서 배치"}
+                          title={placed ? "이미 배치됨" : userPlaced ? "같은 원정대 캐릭터가 배치됨" : "클릭 또는 드래그해서 배치"}
                         >
                           <div style={styles.charCardLeft}>
                             <div style={styles.charName}>{char.name}</div>

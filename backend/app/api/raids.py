@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from typing import List
+from datetime import datetime, timezone
 from app.schemas import (
   RaidCreate, RaidResponse,
   RaidSlotCreate, RaidSlotResponse,
@@ -7,6 +8,7 @@ from app.schemas import (
   CharacterResponse,
 )
 from app.db.supabase_client import supabase
+from app.lostark import get_characters, parse_characters
 
 # 라우터 생성
 router = APIRouter()
@@ -242,6 +244,15 @@ async def add_member(raid_id: str, payload: RaidMemberCreate, added_by: str):
     if not new_user.data:
       raise HTTPException(status_code=500, detail="임시 유저 생성에 실패했습니다.")
     target_user_id = new_user.data[0]["id"]
+
+    # 로스트아크 API로 캐릭터 자동 동기화
+    raw = await get_characters(payload.representative)
+    if raw:
+      characters = await parse_characters(raw, target_user_id)
+      now = datetime.now(timezone.utc).isoformat()
+      for c in characters:
+        c["updated_at"] = now
+      supabase.table("characters").insert(characters).execute()
   else:
     target_user_id = target_result.data[0]["id"]
  

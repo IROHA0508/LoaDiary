@@ -321,8 +321,8 @@ export default function RaidNewPage() {
       transition: "all 0.4s ease",
     }),
     stepLabels: {
-      display: "flex",
-      justifyContent: "space-between",
+      display: "grid",
+      gridTemplateColumns: "repeat(4, 1fr)",
       padding: "0 24px 16px",
     },
     stepLabel: (active) => ({
@@ -330,6 +330,7 @@ export default function RaidNewPage() {
       fontWeight: active ? 600 : 400,
       color: active ? "#f59e0b" : "#475569",
       transition: "all 0.3s ease",
+      textAlign: "center",
     }),
     body: { padding: "28px 24px", minHeight: 320 },
     fadeIn: { animation: "fadeSlideIn 0.35s ease-out" },
@@ -643,8 +644,10 @@ export default function RaidNewPage() {
             >
               <div style={styles.raidEmoji}>{raid.image}</div>
               <div style={{ minWidth: 0 }}>
-                <div style={styles.raidName}>{raid.name}</div>
-                {raid.tag && <div style={styles.raidTag}>{raid.tag}</div>}
+                <div style={{ display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap" }}>
+                  <div style={styles.raidName}>{raid.name}</div>
+                  {raid.tag && <div style={styles.raidTag}>{raid.tag}</div>}
+                </div>
                 <div style={styles.raidMeta}>{raid.gates}관문 · {raid.maxSlots}인</div>
               </div>
             </div>
