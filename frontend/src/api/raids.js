@@ -20,3 +20,6 @@ export const addSlot = (raidId, payload) => client.post(`/api/raids/${raidId}/sl
 
 // 슬롯에서 캐릭터 제거
 export const removeSlot = (slotId) => client.delete(`/api/raids/slots/${slotId}`)
+
+// 내 캐릭터가 슬롯에 배치된 레이드 목록 조회
+export const getJoinedRaids = (fingerprint) => client.get(`/api/raids/joined/${fingerprint}`).then(r => r.data)

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { getCharacters } from '../api/characters'
-import { getMyRaids, deleteRaid } from '../api/raids'
+import { getMyRaids, getJoinedRaids, deleteRaid } from '../api/raids'
 import { useUser } from '../hooks/useUser'
 
 export default function MainPage() {
@@ -20,11 +20,28 @@ export default function MainPage() {
     enabled: !!fingerprint,
   })
 
-  const { data: raids = [], isLoading: raidLoading } = useQuery({
-    queryKey: ['raids', fingerprint],
-    queryFn: () => getMyRaids(fingerprint),
-    enabled: !!fingerprint,
+  // 내가 만든 레이드
+  const { data: myRaids = [], isLoading: myRaidsLoading } = useQuery({
+    queryKey : ['myRaids', fingerprint],
+    queryFn : () => getMyRaids(fingerprint),
+    enabled : !!fingerprint, 
   })
+
+  // 내가 참여한 레이드
+  const { data: joinedRaids = [], isLoading: joinedRaidsLoading } = useQuery({
+    queryKey : ['joinedRaids', fingerprint],
+    queryFn : () => getJoinedRaids(fingerprint),
+    enabled : !!fingerprint, 
+  })
+
+  // 둘 중 하다라도 로딩 중이면 로딩 표시
+  const raidLoading = myRaidsLoading || joinedRaidsLoading
+  
+  // 중복 제거 후 합치기
+  const raids = [
+    ...myRaids,
+    ...joinedRaids.filter(jr => !myRaids.some(mr => mr.id === jr.id))
+  ]
 
   // useMutation : 데이터를 변경하는 API 호출 (삭제, 생성, 수정 등)
   // useQuery는 데이터를 읽기만 하지만, useMutation은 서버 상태를 바꿀 때 사용
@@ -34,7 +51,8 @@ export default function MainPage() {
     // onSuccess : API 호출이 성공했을 때 실행
     onSuccess: () => {
       // invalidateQueries : 해당 쿼리의 캐시를 무효화해서 목록을 다시 불러옴
-      queryClient.invalidateQueries({ queryKey: ['raids', fingerprint] })
+      queryClient.invalidateQueries({ queryKey: ['myRaids', fingerprint] })
+      queryClient.invalidateQueries({ queryKey: ['joinedRaids', fingerprint] })
       setRaidToDelete(null)
     },
   })
@@ -149,7 +167,7 @@ export default function MainPage() {
             <p className="text-gray-500">불러오는 중...</p>
           ) : raids.length === 0 ? (
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-8 text-center">
-              <p className="text-gray-500">아직 생성한 레이드가 없어요.</p>
+              <p className="text-gray-500">참여 중인 레이드가 없습니다.</p>
               <button
                 onClick={() => navigate('/raids/new')}
                 className="mt-4 text-blue-400 hover:text-blue-300 text-sm"
