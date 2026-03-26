@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from app.schemas import UserCreate, UserResponse
 from app.db.supabase_client import supabase
 
@@ -27,6 +27,22 @@ def create_or_get_user(payload: UserCreate):
   if not result.data:
     raise HTTPException(status_code = 500, detail = "유저 생성에 실패했습니다.")
   
+  return result.data[0]
+
+# 대표 캐릭터명으로 유저 검색
+# GET /api/users/search?representative=홍길동
+@router.get("/search/by-representative", response_model=UserResponse)
+def search_user_by_representative(representative: str = Query(..., description="대표 캐릭터명")):
+  result = (
+    supabase.table("users")
+    .select("*")
+    .eq("representative", representative)
+    .execute()
+  )
+ 
+  if not result.data:
+    raise HTTPException(status_code=404, detail="해당 대표 캐릭터를 가진 유저를 찾을 수 없습니다.")
+ 
   return result.data[0]
 
 # 유저 조회 엔드포인트 추가

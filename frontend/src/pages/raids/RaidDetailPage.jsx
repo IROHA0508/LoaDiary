@@ -47,6 +47,25 @@ const API = {
   // 슬롯에서 캐릭터 제거
   removeSlot: (slotId) =>
     fetch(`/api/raids/slots/${slotId}`, { method: "DELETE" }),
+
+  // 멤버 목록 조회 (유저 정보 + 원정대 캐릭터)
+  getMembers: (raidId) =>
+    fetch(`/api/raids/${raidId}/members`).then((r) => r.json()),
+
+  // 멤버 등록 (대표 캐릭터명으로)
+  addMember: (raidId, representative, fingerprint) =>
+    fetch(`/api/raids/${raidId}/members?added_by=${fingerprint}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ representative }),
+    }).then((r) => {
+      if (!r.ok) return r.json().then((e) => { throw new Error(e.detail); });
+      return r.json();
+    }),
+
+  // 멤버 제거
+  removeMember: (raidId, userId) =>
+    fetch(`/api/raids/${raidId}/members/${userId}`, { method: "DELETE" }),
 };
 
 /* ─────────────────────────────────────────────
@@ -82,12 +101,16 @@ export default function RaidDetailPage() {
   const [raid, setRaid] = useState(null);
   const [slots, setSlots] = useState([]); // [{id, character_id, slot_order, role}]
   const [myCharacters, setMyCharacters] = useState([]);
+  const [members, setMembers] = useState([]); // [{user_id, representative, characters}]
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [dragCharId, setDragCharId] = useState(null); // 드래그 중인 캐릭터 id
   const [dragSlotId, setDragSlotId] = useState(null); // 드래그 중인 슬롯 id (슬롯→슬롯 이동용)
   const [toastMsg, setToastMsg] = useState(null);
   const toastTimer = useRef(null);
+  const [searchInput, setSearchInput] = useState("");
+  const [searchState, setSearchState] = useState(null); // null | "loading" | "done" | "error"
+  const [searchError, setSearchError] = useState("");
 
   /* ── 초기 데이터 로드 ──────────────────────── */
   useEffect(() => {
@@ -95,14 +118,16 @@ export default function RaidDetailPage() {
 
     const load = async () => {
       try {
-        const [raidData, slotsData, charsData] = await Promise.all([
+        const [raidData, slotsData, charsData, membersData] = await Promise.all([
           API.getRaid(raidId),
           API.getSlots(raidId),
           API.getMyCharacters(fingerprint),
+          API.getMembers(raidId),
         ]);
         setRaid(raidData);
         setSlots(slotsData);
         setMyCharacters(charsData);
+        setMembers(membersData);
       } catch (e) {
         setError(e.message);
       } finally {
@@ -186,8 +211,41 @@ export default function RaidDetailPage() {
     }
   };
 
+  /* ── 유저 추가 / 제거 ───────────────────────── */
+  const handleAddMember = async () => {
+    const name = searchInput.trim();
+    if (!name) return;
+
+    setSearchState("loading");
+    setSearchError("");
+
+    try {
+      await API.addMember(raidId, name, fingerprint);
+      const updated = await API.getMembers(raidId);
+      setMembers(updated);
+      setSearchInput("");
+      setSearchState("done");
+      setTimeout(() => setSearchState(null), 1500);
+    } catch (e) {
+      setSearchError(e.message);
+      setSearchState("error");
+    }
+  };
+
+  const handleRemoveMember = async (userId) => {
+    try {
+      await API.removeMember(raidId, userId);
+      setMembers((prev) => prev.filter((m) => m.user_id !== userId));
+      const updated = await API.getSlots(raidId);
+      setSlots(updated);
+    } catch {
+      showToast("멤버 제거에 실패했습니다.");
+    }
+  };
+
   /* ── 유틸 ──────────────────────────────────── */
-  const getCharById = (charId) => myCharacters.find((c) => c.id === charId);
+  const allCharacters = [...myCharacters, ...members.flatMap((m) => m.characters)];
+  const getCharById = (charId) => allCharacters.find((c) => c.id === charId);
   const getSlotAt = (slotOrder) => slots.find((s) => s.slot_order === slotOrder);
   const isCharPlaced = (charId) => slots.some((s) => s.character_id === charId);
 
@@ -304,11 +362,46 @@ export default function RaidDetailPage() {
             </div>
           </div>
 
-          {/* ── 내 캐릭터 패널 ───────────────────── */}
+          {/* ── 캐릭터 패널 ──────────────────────── */}
           <div style={styles.charPanel}>
-            <div style={styles.sectionLabel}>내 캐릭터</div>
+
+            {/* 유저 추가 영역 */}
+            <div style={styles.addMemberBox}>
+              <div style={styles.sectionLabel}>유저 추가</div>
+              <div style={styles.searchRow}>
+                <input
+                  className="member-search-input"
+                  style={styles.searchInput}
+                  type="text"
+                  placeholder="대표 캐릭터명 입력"
+                  value={searchInput}
+                  onChange={(e) => {
+                    setSearchInput(e.target.value);
+                    setSearchState(null);
+                    setSearchError("");
+                  }}
+                  onKeyDown={(e) => e.key === "Enter" && handleAddMember()}
+                />
+                <div
+                  style={styles.searchBtn(searchState === "loading")}
+                  onClick={handleAddMember}
+                >
+                  {searchState === "loading" ? "…" : "+"}
+                </div>
+              </div>
+              {searchState === "error" && (
+                <div style={styles.searchFeedback("error")}>{searchError}</div>
+              )}
+              {searchState === "done" && (
+                <div style={styles.searchFeedback("done")}>✓ 추가됐습니다</div>
+              )}
+            </div>
+
             <div style={styles.charHint}>드래그해서 슬롯에 배치 · 더블클릭으로 제거</div>
+
             <div style={styles.charList}>
+              {/* 내 캐릭터 */}
+              <div style={styles.charGroupLabel}>내 캐릭터</div>
               {myCharacters.length === 0 ? (
                 <div style={styles.emptyChars}>등록된 캐릭터가 없습니다</div>
               ) : (
@@ -334,6 +427,47 @@ export default function RaidDetailPage() {
                   );
                 })
               )}
+
+              {/* 멤버별 캐릭터 */}
+              {members.map((member) => (
+                <div key={member.user_id}>
+                  <div style={styles.memberHeader}>
+                    <div style={styles.charGroupLabel}>{member.representative}</div>
+                    <div
+                      style={styles.removeMemberBtn}
+                      onClick={() => handleRemoveMember(member.user_id)}
+                      title="멤버 제거"
+                    >
+                      ✕
+                    </div>
+                  </div>
+                  {member.characters.length === 0 ? (
+                    <div style={styles.emptyChars}>캐릭터 없음</div>
+                  ) : (
+                    member.characters.map((char) => {
+                      const placed = isCharPlaced(char.id);
+                      return (
+                        <div
+                          key={char.id}
+                          draggable={!placed}
+                          onDragStart={(e) => !placed && onCharDragStart(e, char.id)}
+                          style={styles.charCard(placed)}
+                          title={placed ? "이미 배치됨" : "드래그해서 배치"}
+                        >
+                          <div style={styles.charCardLeft}>
+                            <div style={styles.charName}>{char.name}</div>
+                            <div style={styles.charClass}>{char.class_name}</div>
+                          </div>
+                          <div style={styles.charLevel}>
+                            {char.item_level?.toLocaleString() ?? "-"}
+                          </div>
+                          {placed && <div style={styles.placedBadge}>배치됨</div>}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -623,6 +757,74 @@ const styles = {
     fontWeight: 700,
     color: "#22c55e",
     letterSpacing: "0.04em",
+  },
+   // 유저 추가 박스
+  addMemberBox: {
+    marginBottom: 14,
+    padding: "14px",
+    borderRadius: 12,
+    background: "rgba(15,23,42,0.6)",
+    border: "1px solid rgba(248,250,252,0.06)",
+  },
+  searchRow: { display: "flex", gap: 6 },
+  searchInput: {
+    flex: 1,
+    padding: "8px 10px",
+    fontSize: 12,
+    borderRadius: 8,
+    border: "1px solid rgba(248,250,252,0.08)",
+    background: "rgba(30,41,59,0.6)",
+    color: "#e2e8f0",
+    outline: "none",
+    minWidth: 0,
+    transition: "border-color 0.2s",
+  },
+  searchBtn: (isLoading) => ({
+    width: 32,
+    height: 32,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 8,
+    background: isLoading
+      ? "rgba(100,116,139,0.2)"
+      : "linear-gradient(135deg, #f59e0b, #f97316)",
+    color: isLoading ? "#475569" : "#0f172a",
+    fontSize: 18,
+    fontWeight: 700,
+    cursor: isLoading ? "not-allowed" : "pointer",
+    flexShrink: 0,
+    transition: "all 0.2s",
+  }),
+  searchFeedback: (type) => ({
+    marginTop: 8,
+    fontSize: 11,
+    fontWeight: 600,
+    color: type === "error" ? "#ef4444" : "#22c55e",
+  }),
+  charGroupLabel: {
+    fontSize: 10,
+    fontWeight: 700,
+    color: "#475569",
+    textTransform: "uppercase",
+    letterSpacing: "0.06em",
+    marginTop: 10,
+    marginBottom: 6,
+  },
+  memberHeader: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  removeMemberBtn: {
+    fontSize: 10,
+    color: "#475569",
+    cursor: "pointer",
+    padding: "2px 6px",
+    borderRadius: 4,
+    border: "1px solid rgba(248,250,252,0.06)",
+    marginBottom: 6,
+    transition: "all 0.2s",
   },
   // 토스트
   toast: {

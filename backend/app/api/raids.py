@@ -1,6 +1,11 @@
 from fastapi import APIRouter, HTTPException
 from typing import List
-from app.schemas import RaidCreate, RaidResponse, RaidSlotCreate, RaidSlotResponse
+from app.schemas import (
+  RaidCreate, RaidResponse,
+  RaidSlotCreate, RaidSlotResponse,
+  RaidMemberCreate, RaidMemberResponse, RaidMemberWithCharacters,
+  CharacterResponse,
+)
 from app.db.supabase_client import supabase
 
 # 라우터 생성
@@ -198,3 +203,128 @@ async def add_slot(raid_id: str, payload: RaidSlotCreate):
     raise HTTPException(status_code=500, detail="슬롯 추가에 실패했습니다.")
 
   return result.data[0]
+
+# ──────────────────────────────────────────
+# 레이드 멤버 (참여 유저)
+# ──────────────────────────────────────────
+ 
+# 멤버 등록 (대표 캐릭터명으로 유저 검색 후 추가)
+@router.post("/{raid_id}/members", response_model=RaidMemberResponse, status_code=201)
+async def add_member(raid_id: str, payload: RaidMemberCreate, added_by: str):
+  # 1. added_by fingerprint → user_id 변환
+  adder_result = (
+    supabase.table("users")
+    .select("id")
+    .eq("fingerprint", added_by)
+    .execute()
+  )
+ 
+  if not adder_result.data:
+    raise HTTPException(status_code=404, detail="요청한 유저를 찾을 수 없습니다.")
+ 
+  adder_id = adder_result.data[0]["id"]
+ 
+  # 2. 대표 캐릭터명으로 추가할 유저 검색
+  target_result = (
+    supabase.table("users")
+    .select("id")
+    .eq("representative", payload.representative)
+    .execute()
+  )
+ 
+  if not target_result.data:
+    raise HTTPException(status_code=404, detail=f"'{payload.representative}' 캐릭터를 가진 유저를 찾을 수 없습니다.")
+ 
+  target_user_id = target_result.data[0]["id"]
+ 
+  # 3. 본인을 추가하려는 경우 차단
+  if adder_id == target_user_id:
+    raise HTTPException(status_code=400, detail="본인은 추가할 수 없습니다.")
+ 
+  # 4. raid_members에 등록 (중복이면 DB UNIQUE 제약으로 에러)
+  try:
+    result = (
+      supabase.table("raid_members")
+      .insert({
+        "raid_id": raid_id,
+        "user_id": target_user_id,
+        "added_by": adder_id,
+      })
+      .execute()
+    )
+  except Exception:
+    raise HTTPException(status_code=409, detail="이미 등록된 유저입니다.")
+ 
+  if not result.data:
+    raise HTTPException(status_code=500, detail="멤버 등록에 실패했습니다.")
+ 
+  return result.data[0]
+ 
+# 멤버 목록 조회 (유저 정보 + 원정대 캐릭터 포함)
+@router.get("/{raid_id}/members", response_model=List[RaidMemberWithCharacters])
+async def get_members(raid_id: str):
+  # 1. 해당 레이드의 멤버 목록 조회
+  member_result = (
+    supabase.table("raid_members")
+    .select("user_id")
+    .eq("raid_id", raid_id)
+    .execute()
+  )
+ 
+  if not member_result.data:
+    return []
+ 
+  user_ids = [m["user_id"] for m in member_result.data]
+ 
+  # 2. 각 유저의 정보 + 캐릭터 목록 조회
+  members_with_chars = []
+ 
+  for user_id in user_ids:
+    # 유저 정보
+    user_result = (
+      supabase.table("users")
+      .select("id, representative")
+      .eq("id", user_id)
+      .execute()
+    )
+ 
+    if not user_result.data:
+      continue
+ 
+    user = user_result.data[0]
+ 
+    # 해당 유저의 캐릭터 목록 (아이템레벨 내림차순)
+    char_result = (
+      supabase.table("characters")
+      .select("*")
+      .eq("user_id", user_id)
+      .order("item_level", desc=True)
+      .execute()
+    )
+ 
+    characters = []
+    for row in char_result.data:
+      row["class_name"] = row.pop("class", None)
+      characters.append(row)
+ 
+    members_with_chars.append({
+      "user_id": user_id,
+      "representative": user["representative"],
+      "characters": characters,
+    })
+ 
+  return members_with_chars
+ 
+# 멤버 제거
+@router.delete("/{raid_id}/members/{user_id}", status_code=204)
+async def remove_member(raid_id: str, user_id: str):
+  result = (
+    supabase.table("raid_members")
+    .delete()
+    .eq("raid_id", raid_id)
+    .eq("user_id", user_id)
+    .execute()
+  )
+ 
+  if not result.data:
+    raise HTTPException(status_code=404, detail="해당 멤버를 찾을 수 없습니다.")

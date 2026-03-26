@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 
 # ──────────────────────────────────────────
@@ -93,3 +93,28 @@ class RaidSlotResponse(BaseModel):
   role: Optional[str]
 
   model_config = {"from_attributes": True}
+
+
+# ──────────────────────────────────────────
+# RaidMember
+# ──────────────────────────────────────────
+ 
+class RaidMemberCreate(BaseModel):
+  representative: str                   # 추가할 유저의 대표 캐릭터명
+ 
+ 
+class RaidMemberResponse(BaseModel):
+  id: str
+  raid_id: str
+  user_id: str
+  added_by: str
+  created_at: datetime
+ 
+  model_config = {"from_attributes": True}
+ 
+ 
+# 멤버 목록 조회 시 유저 정보 + 캐릭터 목록을 함께 반환
+class RaidMemberWithCharacters(BaseModel):
+  user_id: str
+  representative: str                   # 대표 캐릭터명
+  characters: List[CharacterResponse]   # 해당 유저의 원정대 전체 캐릭터
