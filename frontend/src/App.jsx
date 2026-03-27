@@ -13,6 +13,7 @@ import { useUser } from './hooks/useUser'
 import { getUser } from './api/users'
 
 // export default로 내보낸 컴포넌트는 중괄호 없이 import 가능
+import Layout from './components/Layout'
 import OnboardingPage from './pages/OnboardingPage'
 import MainPage from './pages/MainPage'
 import RaidNewPage from './pages/raids/RaidNewPage'
@@ -60,20 +61,25 @@ function AppRoutes(){
 
   return (
     <Routes>
-      {/* path="/" : 메인 URL일 때 MainPage 컴포넌트 표시 */}
-      <Route path="/" element={<MainPage />} />
-
       {/* path="/onboarding" : /onboarding URL일 때 OnboardingPage 표시 */}
       <Route path="/onboarding" element={<OnboardingPage />} />
-      <Route path="/raids/new" element={<RaidNewPage />} />
+      
+      {/* 나머지 모든 페이지는 Layout(공통 헤더) 안에서 렌더링 */}
+      <Route element={<Layout />}>
+        {/* path="/" : 메인 URL일 때 MainPage 컴포넌트 표시 */}
+        <Route path="/" element={<MainPage />} />
 
-      {/* path="/raids/:id" : 레이드 상세 및 파티 배치 페이지 */}
-      <Route path="/raids/:id" element={<RaidDetailPage />} />
+        <Route path="/raids/new" element={<RaidNewPage />} />
 
-      {/* 헤더에 있는 랭킹, 거래소, 떠돌이 상인 페이지 */}
-      <Route path="/ranking" element={<RankingPage />} />
-      <Route path="/market" element={<MarketPage />} />
-      <Route path="/merchants" element={<MerchantPage />} />
+        {/* path="/raids/:id" : 레이드 상세 및 파티 배치 페이지 */}
+        <Route path="/raids/:id" element={<RaidDetailPage />} />
+
+        {/* 헤더에 있는 랭킹, 거래소, 떠돌이 상인 페이지 */}
+        <Route path="/ranking" element={<RankingPage />} />
+        <Route path="/market" element={<MarketPage />} />
+        <Route path="/merchants" element={<MerchantPage />} />
+      </Route>
+
       {/* path="*" : 위에서 매칭되지 않은 모든 URL (ex. /asdfgh) */}
       {/* Navigate to="/" : 메인 페이지로 리다이렉트 */}
       {/* replace : 뒤로가기 시 잘못된 URL로 돌아가지 않도록 히스토리 교체 */}
