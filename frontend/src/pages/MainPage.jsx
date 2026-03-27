@@ -2,7 +2,7 @@ import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { getCharacters } from '../api/characters'
-import { getMyRaids, getJoinedRaids, deleteRaid } from '../api/raids'
+import { getMyRaids, getJoinedRaids, deleteRaid, getSlots } from '../api/raids'
 import { useUser } from '../hooks/useUser'
 
 /* ─────────────────────────────────────────────
@@ -65,10 +65,13 @@ export default function MainPage() {
   const [raidToDelete, setRaidToDelete] = useState(null)
 
   // 드래그 관련 상태
-  const [raidOrder, setRaidOrder] = useState([])     // raid id 순서 배열
-  const [orderedRaids, setOrderedRaids] = useState([]) // 순서 적용된 raids
+  const [raidOrder, setRaidOrder] = useState([])
+  const [orderedRaids, setOrderedRaids] = useState([])
   const dragIndex = useRef(null)
   const dragOverIndex = useRef(null)
+
+  // 레이드별 슬롯 데이터: { [raidId]: [{slot_order, ...}] }
+  const [slotsMap, setSlotsMap] = useState({})
 
   /* ── 데이터 조회 ──────────────────────────── */
   const { data: characters = [], isLoading: charLoading } = useQuery({
@@ -90,7 +93,6 @@ export default function MainPage() {
     queryFn: () => getJoinedRaids(fingerprint),
     enabled: !!fingerprint,
     onSuccess: (data) => {
-      // 레이드 데이터가 처음 로드될 때 순서 초기화
       const merged = [
         ...myRaids,
         ...data.filter(jr => !myRaids.some(mr => mr.id === jr.id))
@@ -102,17 +104,34 @@ export default function MainPage() {
 
   const raidLoading = myRaidsLoading || joinedRaidsLoading
 
-  // 중복 제거 후 합치기 (순서 미적용 원본)
+  // 중복 제거 후 합치기
   const rawRaids = [
     ...myRaids,
     ...joinedRaids.filter(jr => !myRaids.some(mr => mr.id === jr.id))
   ]
 
   // 순서 배열 기반으로 raids 정렬
-  // orderedRaids가 비어있으면 rawRaids 사용
   const raids = raidOrder.length > 0
     ? raidOrder.map(id => rawRaids.find(r => r.id === id)).filter(Boolean)
     : rawRaids
+
+  // raids가 확정되면 각 레이드의 슬롯 일괄 조회
+  // rawRaids가 바뀔 때마다 새 레이드의 슬롯만 추가 조회
+  const prevRaidIdsRef = useRef(new Set())
+  if (!raidLoading && rawRaids.length > 0) {
+    const newIds = rawRaids.filter(r => !prevRaidIdsRef.current.has(r.id))
+    if (newIds.length > 0) {
+      newIds.forEach(r => prevRaidIdsRef.current.add(r.id))
+      Promise.all(newIds.map(r => getSlots(r.id).then(slots => ({ id: r.id, slots }))))
+        .then(results => {
+          setSlotsMap(prev => {
+            const next = { ...prev }
+            results.forEach(({ id, slots }) => { next[id] = slots })
+            return next
+          })
+        })
+    }
+  }
 
   /* ── 레이드 삭제 ──────────────────────────── */
   const deleteMutation = useMutation({
@@ -224,14 +243,26 @@ export default function MainPage() {
                       {raid.raid_name}
                     </span>
 
-                    {/* 슬롯 파이프 */}
-                    <div className="flex gap-1 items-center flex-shrink-0">
-                      {Array.from({ length: raid.max_slots }).map((_, i) => (
-                        <span
-                          key={i}
-                          className="block w-2 h-2 rounded-full bg-gray-700"
-                        />
-                      ))}
+                    {/* 슬롯 파이프 — 4개 단위로 파티 구분 */}
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      {Array.from({ length: raid.max_slots }).map((_, i) => {
+                        const isFilled = (slotsMap[raid.id] || [])
+                          .some(s => s.slot_order === i)
+                        // 4번째 슬롯 이후 첫 번째 (파티 경계)에 구분선 추가
+                        const isPartyBreak = i > 0 && i % 4 === 0
+                        return (
+                          <span key={i} className="flex items-center gap-1">
+                            {isPartyBreak && (
+                              <span className="block w-px h-3 bg-gray-700 mx-0.5 flex-shrink-0" />
+                            )}
+                            <span
+                              className={`block w-2 h-2 rounded-full flex-shrink-0 transition-colors ${
+                                isFilled ? 'bg-blue-400' : 'bg-gray-700'
+                              }`}
+                            />
+                          </span>
+                        )
+                      })}
                     </div>
 
                     {/* 내가 만든 / 참여 중 태그 */}
@@ -385,9 +416,11 @@ export default function MainPage() {
             </h3>
             <p className="text-sm text-gray-400">
               <span className="text-white font-medium">{raidToDelete.raid_name}</span>
-              {isMyRaid(raidToDelete.id)
-                ? ' 레이드를 삭제할까요?\n이 작업은 되돌릴 수 없어요.'
-                : ' 레이드에서 나갈까요?'}
+              {isMyRaid(raidToDelete.id) ? (
+                <> 레이드를 삭제할까요?<br />이 작업은 되돌릴 수 없어요.</>
+              ) : (
+                <> 레이드에서 나갈까요?</>
+              )}
             </p>
             <div className="flex gap-2 pt-1">
               <button
