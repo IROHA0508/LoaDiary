@@ -44,7 +44,12 @@ class CharacterResponse(BaseModel):
   item_level: Optional[float]
   combat_power: Optional[float]
   server: str
+  # 서포터 빌드 여부 — 각인(Effects)에서 서포터 직업 각인 감지 시 True
+  # DB 컬럼 없는 구버전 데이터는 None으로 올 수 있으므로 Optional 처리
+  is_support: Optional[bool] = False
   updated_at: datetime
+ 
+  model_config = {"from_attributes": True}
 
   model_config = {"from_attributes": True}
 
@@ -118,3 +123,13 @@ class RaidMemberWithCharacters(BaseModel):
   user_id: str
   representative: str                   # 대표 캐릭터명
   characters: List[CharacterResponse]   # 해당 유저의 원정대 전체 캐릭터
+ 
+ 
+# ──────────────────────────────────────────
+# 주간 참여 완료 슬롯
+# ──────────────────────────────────────────
+class WeeklyUsedSlotResponse(BaseModel):
+  raid_instance_id: str   # 어느 레이드 인스턴스에 배치됐는지
+  character_id: str       # 배치된 캐릭터 id
+ 
+  model_config = {"from_attributes": True}

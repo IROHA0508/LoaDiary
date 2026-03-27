@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from typing import List
 from datetime import datetime, timezone
 from app.schemas import (
@@ -6,6 +6,7 @@ from app.schemas import (
   RaidSlotCreate, RaidSlotResponse,
   RaidMemberCreate, RaidMemberResponse, RaidMemberWithCharacters,
   CharacterResponse,
+  WeeklyUsedSlotResponse,
 )
 from app.db.supabase_client import supabase
 from app.lostark import get_characters, parse_characters
@@ -114,6 +115,42 @@ async def get_joined_raids(fingerprint: str):
 
     return raid_result.data
 
+# 주간 참여 완료 슬롯 조회
+# GET /api/raids/weekly-used-slots?raid_type=serca&week_start=2025-01-01T21:00:00Z
+# - 동일 raid_id(종류)에 week_start 이후 생성된 레이드 인스턴스의 모든 슬롯을 반환
+# - 프론트엔드에서 현재 인스턴스를 제외한 나머지로 주간 중복 참여를 판단
+@router.get("/weekly-used-slots", response_model=List[WeeklyUsedSlotResponse])
+async def get_weekly_used_slots(
+  raid_type: str = Query(..., description="레이드 종류 id (e.g. 'serca', 'kamen')"),
+  week_start: str = Query(..., description="이번 주 초기화 시각 (ISO 8601 UTC)"),
+):
+  # 1. 해당 raid_type의 이번 주 레이드 인스턴스 id 목록 조회
+  raid_result = (
+    supabase.table("raids")
+    .select("id")
+    .eq("raid_id", raid_type)
+    .gte("created_at", week_start)
+    .execute()
+  )
+
+  if not raid_result.data:
+    return []
+
+  raid_instance_ids = [r["id"] for r in raid_result.data]
+
+  # 2. 해당 인스턴스들의 슬롯 조회
+  slot_result = (
+    supabase.table("raid_slots")
+    .select("raid_id, character_id")
+    .in_("raid_id", raid_instance_ids)
+    .execute()
+  )
+
+  return [
+    {"raid_instance_id": s["raid_id"], "character_id": s["character_id"]}
+    for s in slot_result.data
+  ]
+
 # 단일 레이드 조회
 @router.get("/{raid_id}", response_model=RaidResponse)
 async def get_raid(raid_id: str):
@@ -171,10 +208,10 @@ async def get_slots(raid_id: str):
 # 슬롯에 캐릭터 배치
 @router.post("/{raid_id}/slots", response_model=RaidSlotResponse, status_code=201)
 async def add_slot(raid_id: str, payload: RaidSlotCreate):
-  # 최대 슬롯 수 체크
+  # 레이드 정보 조회
   raid_result = (
     supabase.table("raids")
-    .select("max_slots")
+    .select("max_slots, raid_id")
     .eq("id", raid_id)
     .execute()
   )
@@ -182,6 +219,9 @@ async def add_slot(raid_id: str, payload: RaidSlotCreate):
   if not raid_result.data:
     raise HTTPException(status_code=404, detail="레이드를 찾을 수 없습니다.")
 
+  raid_info = raid_result.data[0]
+
+  # 최대 슬롯 수 체크
   current_slots = (
     supabase.table("raid_slots")
     .select("id", count="exact")
@@ -189,8 +229,56 @@ async def add_slot(raid_id: str, payload: RaidSlotCreate):
     .execute()
   )
 
-  if current_slots.count >= raid_result.data[0]["max_slots"]:
+  if current_slots.count >= raid_info["max_slots"]:
     raise HTTPException(status_code=400, detail="슬롯이 가득 찼습니다.")
+
+  # ── 주간 중복 참여 차단 ───────────────────────────────────────
+  # 수요일 06:00 KST(= 수요일 21:00 UTC 전날) 기준 이번 주 초기화 시각 계산
+  now_utc = datetime.now(timezone.utc)
+  # KST = UTC+9
+  now_kst = now_utc.replace(tzinfo=None)
+  now_kst_aware = datetime.now(timezone.utc)
+
+  # UTC 기준으로 이번 주 수요일 21:00 UTC (= KST 수요일 06:00) 계산
+  weekday = now_utc.weekday()   # 0=월 1=화 2=수 3=목 4=금 5=토 6=일
+  hour_utc = now_utc.hour
+
+  # 가장 최근 수요일 21:00 UTC 를 구함
+  # 수요일 = weekday 2
+  days_back = (weekday - 2) % 7
+  if days_back == 0 and hour_utc < 21:
+    days_back = 7   # 수요일이지만 21:00 UTC 이전 → 지난 주 수요일
+
+  from datetime import timedelta
+  reset_utc = now_utc.replace(hour=21, minute=0, second=0, microsecond=0) \
+              - timedelta(days=days_back)
+  week_start_iso = reset_utc.isoformat()
+
+  # 같은 raid_id(종류)의 이번 주 인스턴스 조회
+  same_type_raids = (
+    supabase.table("raids")
+    .select("id")
+    .eq("raid_id", raid_info["raid_id"])
+    .gte("created_at", week_start_iso)
+    .neq("id", raid_id)          # 현재 인스턴스는 제외
+    .execute()
+  )
+
+  if same_type_raids.data:
+    other_ids = [r["id"] for r in same_type_raids.data]
+    already_used = (
+      supabase.table("raid_slots")
+      .select("id")
+      .in_("raid_id", other_ids)
+      .eq("character_id", payload.character_id)
+      .execute()
+    )
+    if already_used.data:
+      raise HTTPException(
+        status_code=409,
+        detail="이번 주 해당 레이드에 이미 참여한 캐릭터입니다."
+      )
+  # ────────────────────────────────────────────────────────────
 
   data = {
     "raid_id": raid_id,

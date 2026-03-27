@@ -64,40 +64,21 @@ const API = {
       return r.json();
     }),
 
+  // 레이드 정보 수정
+  updateRaid: (raidId, payload) =>
+    fetch(`/api/raids/${raidId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }).then((r) => {
+      if (!r.ok) return r.json().then((e) => { throw new Error(e.detail); });
+      return r.json();
+    }),
+
   // 멤버 제거
   removeMember: (raidId, userId) =>
     fetch(`/api/raids/${raidId}/members/${userId}`, { method: "DELETE" }),
-
-  // 동일 레이드 종류의 이번 주 슬롯 조회 (주간 참여 완료 체크용)
-  // raid_type: 레이드 종류 id (e.g. "serca", "kamen")
-  // week_start: 이번 주 수요일 06시 KST ISO 문자열
-  getWeeklyUsedSlots: (raidType, weekStart) =>
-    fetch(`/api/raids/weekly-used-slots?raid_type=${encodeURIComponent(raidType)}&week_start=${encodeURIComponent(weekStart)}`)
-      .then((r) => r.ok ? r.json() : [])
-      .catch(() => []),
 };
-
-/* ─────────────────────────────────────────────
-   주간 초기화 유틸 (수요일 06:00 KST)
-   ───────────────────────────────────────────── */
-function getWeeklyResetStart() {
-  // 현재 시각을 KST(UTC+9) 기준으로 계산
-  const now = new Date();
-  const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
-  const day = kst.getUTCDay();   // 0=일 1=월 2=화 3=수 4=목 5=금 6=토
-  const hour = kst.getUTCHours();
-
-  // 가장 최근 수요일 06:00 KST를 구함
-  let daysBack = (day - 3 + 7) % 7;          // 수요일까지 며칠 전인지
-  if (daysBack === 0 && hour < 6) daysBack = 7; // 수요일이지만 06시 이전 → 지난 주 수요일
-
-  const reset = new Date(kst);
-  reset.setUTCDate(kst.getUTCDate() - daysBack);
-  reset.setUTCHours(6, 0, 0, 0);
-
-  // KST → UTC 로 변환해서 ISO 문자열 반환
-  return new Date(reset.getTime() - 9 * 60 * 60 * 1000).toISOString();
-}
 
 /* ─────────────────────────────────────────────
    파티 슬롯 계산 유틸
@@ -120,6 +101,35 @@ function buildPartyStructure(maxSlots) {
   }
   return parties;
 }
+
+/* ─────────────────────────────────────────────
+   레이드별 난이도/최대인원 메타 (수정 모달용)
+   ───────────────────────────────────────────── */
+const RAID_META = {
+  argos:              { difficulties: ["노말"],                        maxSlots: 8  },
+  valtan:             { difficulties: ["노말","하드"],                  maxSlots: 8  },
+  biackiss:           { difficulties: ["노말","하드"],                  maxSlots: 8  },
+  koukusaton:         { difficulties: ["노말"],                        maxSlots: 4  },
+  abrelshud_legion:   { difficulties: ["노말","하드"],                  maxSlots: 8  },
+  illiakan:           { difficulties: ["노말","하드"],                  maxSlots: 8  },
+  kamen:              { difficulties: ["노말","하드"],                  maxSlots: 8  },
+  echidna:            { difficulties: ["노말","하드"],                  maxSlots: 8  },
+  egir:               { difficulties: ["노말","하드"],                  maxSlots: 8  },
+  abrelshud_kazeroth: { difficulties: ["노말","하드"],                  maxSlots: 8  },
+  mordoom:            { difficulties: ["노말","하드"],                  maxSlots: 8  },
+  armorche:           { difficulties: ["노말","하드"],                  maxSlots: 8  },
+  kazeroth_boss:      { difficulties: ["노말","하드"],                  maxSlots: 8  },
+  behemoth:           { difficulties: ["노말"],                        maxSlots: 16 },
+  serca:              { difficulties: ["노말","하드","나이트메어"],      maxSlots: 4  },
+  elvalria:           { difficulties: ["노말"],                        maxSlots: 4  },
+  dream_palace:       { difficulties: ["노말"],                        maxSlots: 4  },
+  ark_arrogance:      { difficulties: ["노말"],                        maxSlots: 4  },
+  gate_paradise:      { difficulties: ["노말"],                        maxSlots: 4  },
+  oreha:              { difficulties: ["노말","하드"],                  maxSlots: 4  },
+  kayangel:           { difficulties: ["노말","하드"],                  maxSlots: 4  },
+  tower_chaos:        { difficulties: ["노말","하드"],                  maxSlots: 4  },
+  cathedral:          { difficulties: ["1단계","2단계","3단계"],         maxSlots: 4  },
+};
 
 /* ─────────────────────────────────────────────
    Main Component
@@ -145,8 +155,10 @@ export default function RaidDetailPage() {
   const [searchError, setSearchError] = useState("");
   // 자동 로드된 멤버 representative 목록 (배지 표시용)
   const [autoLoadedReps, setAutoLoadedReps] = useState(new Set());
-  // 이번 주에 동일 레이드 종류에 이미 참여한 캐릭터 id 집합 (주간 잠금)
-  const [weeklyLockedCharIds, setWeeklyLockedCharIds] = useState(new Set());
+  // 레이드 정보 수정 모달
+  const [editModal, setEditModal] = useState(false);
+  const [editForm, setEditForm] = useState({ difficulty: "", max_slots: 8 });
+  const [editSaving, setEditSaving] = useState(false);
 
   /* ── 최근 멤버 localStorage 키 ─────────────── */
   const recentMembersKey = raidId ? `raid_recent_members:${raidId}` : null;
@@ -232,22 +244,6 @@ export default function RaidDetailPage() {
         setMyCharacters(charsData);
         setMembers(membersData);
 
-        /* ── 주간 잠금 캐릭터 로드 ──────────────────
-           현재 레이드와 동일한 raid_id(종류)에 이번 주
-           이미 배치된 캐릭터들을 잠가 중복 참여를 방지.
-        ──────────────────────────────────────────── */
-        try {
-          const weekStart = getWeeklyResetStart();
-          const usedSlots = await API.getWeeklyUsedSlots(raidData.raid_id, weekStart);
-          // 현재 레이드 인스턴스(raidId)의 슬롯은 제외 — 현재 파티 내 배치는 허용
-          const lockedIds = new Set(
-            usedSlots
-              .filter((s) => s.raid_instance_id !== raidId)
-              .map((s) => s.character_id)
-          );
-          setWeeklyLockedCharIds(lockedIds);
-        } catch {}
-
         /* ── 최근 멤버 자동 로드 ─────────────────── */
         const recentReps = loadRecentMembers();
         const existingReps = new Set(membersData.map((m) => m.representative));
@@ -279,6 +275,23 @@ export default function RaidDetailPage() {
     setToastMsg(msg);
     clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToastMsg(null), 2500);
+  };
+
+  /* ── 레이드 정보 수정 저장 ──────────────────── */
+  const handleEditSave = async () => {
+    setEditSaving(true);
+    try {
+      const updated = await API.updateRaid(raidId, {
+        difficulty: editForm.difficulty,
+        max_slots: editForm.max_slots,
+      });
+      setRaid(updated);
+      setEditModal(false);
+    } catch (e) {
+      showToast(e.message || "수정에 실패했습니다.");
+    } finally {
+      setEditSaving(false);
+    }
   };
 
   /* ── 드래그 앤 드롭 핸들러 ─────────────────── */
@@ -407,17 +420,14 @@ export default function RaidDetailPage() {
     return false;
   };
 
-  // 주간 참여 완료 여부 (다른 레이드 인스턴스에서 이미 이번 주 참여)
-  const isWeeklyLocked = (charId) => weeklyLockedCharIds.has(charId);
-
-  // 드래그 불가 여부
-  const isDraggable = (charId) =>
-    !isCharPlaced(charId) && !isUserAlreadyPlaced(charId) && !isWeeklyLocked(charId);
+  // 드래그 불가 여부 (이미 배치됐거나 같은 유저의 캐릭터가 배치됨)
+  const isDraggable = (charId) => !isCharPlaced(charId) && !isUserAlreadyPlaced(charId);
 
   /* ── 클릭으로 배치 / 제거 ──────────────────── */
+  // 클릭 시: 이미 배치됐으면 제거, 아니면 1파티→2파티 순으로 첫 번째 빈 슬롯에 자동 배치
   const onCharClick = async (charId) => {
+    // 같은 원정대의 다른 캐릭터가 배치된 경우 무시
     if (isUserAlreadyPlaced(charId)) return;
-    if (isWeeklyLocked(charId)) return;
 
     const existingSlot = slots.find((s) => s.character_id === charId);
     if (existingSlot) {
@@ -504,6 +514,15 @@ export default function RaidDetailPage() {
               onClick={() => navigate("/")}
             >
               ✓ 배치 완료
+            </div>
+            <div
+              style={styles.editBtn}
+              onClick={() => {
+                setEditForm({ difficulty: raid.difficulty, max_slots: raid.max_slots });
+                setEditModal(true);
+              }}
+            >
+              ✏ 수정
             </div>
             <div
               style={styles.deleteBtn}
@@ -635,13 +654,8 @@ export default function RaidDetailPage() {
                   myCharacters.map((char) => {
                     const placed = isCharPlaced(char.id);
                     const userPlaced = isUserAlreadyPlaced(char.id);
-                    const weeklyLocked = isWeeklyLocked(char.id);
                     const draggable = isDraggable(char.id);
-                    const disabled = placed || userPlaced || weeklyLocked;
-                    const titleMsg = placed ? "이미 배치됨"
-                      : weeklyLocked ? "이번 주 해당 레이드 참여 완료"
-                      : userPlaced ? "같은 원정대 캐릭터가 배치됨"
-                      : "클릭 또는 드래그해서 배치";
+                    const disabled = placed || userPlaced;
                     return (
                       <div
                         key={char.id}
@@ -649,7 +663,7 @@ export default function RaidDetailPage() {
                         onDragStart={(e) => draggable && onCharDragStart(e, char.id)}
                         onClick={() => onCharClick(char.id)}
                         style={styles.charCard(disabled)}
-                        title={titleMsg}
+                        title={placed ? "이미 배치됨" : userPlaced ? "같은 원정대 캐릭터가 배치됨" : "클릭 또는 드래그해서 배치"}
                       >
                         <div style={styles.charCardLeft}>
                           <div style={styles.charName}>{char.name}</div>
@@ -659,12 +673,7 @@ export default function RaidDetailPage() {
                           {char.item_level?.toLocaleString() ?? "-"}
                         </div>
                         {placed && <div style={styles.placedBadge}>배치됨</div>}
-                        {weeklyLocked && !placed && (
-                          <div style={{ ...styles.placedBadge, color: "#a855f7" }}>주간 완료</div>
-                        )}
-                        {!placed && !weeklyLocked && userPlaced && (
-                          <div style={{ ...styles.placedBadge, color: "#ef4444" }}>배치 불가</div>
-                        )}
+                        {!placed && userPlaced && <div style={{ ...styles.placedBadge, color: "#ef4444" }}>배치 불가</div>}
                       </div>
                     );
                   })
@@ -695,13 +704,8 @@ export default function RaidDetailPage() {
                     member.characters.map((char) => {
                       const placed = isCharPlaced(char.id);
                       const userPlaced = isUserAlreadyPlaced(char.id);
-                      const weeklyLocked = isWeeklyLocked(char.id);
                       const draggable = isDraggable(char.id);
-                      const disabled = placed || userPlaced || weeklyLocked;
-                      const titleMsg = placed ? "이미 배치됨"
-                        : weeklyLocked ? "이번 주 해당 레이드 참여 완료"
-                        : userPlaced ? "같은 원정대 캐릭터가 배치됨"
-                        : "클릭 또는 드래그해서 배치";
+                      const disabled = placed || userPlaced;
                       return (
                         <div
                           key={char.id}
@@ -709,7 +713,7 @@ export default function RaidDetailPage() {
                           onDragStart={(e) => draggable && onCharDragStart(e, char.id)}
                           onClick={() => onCharClick(char.id)}
                           style={styles.charCard(disabled)}
-                          title={titleMsg}
+                          title={placed ? "이미 배치됨" : userPlaced ? "같은 원정대 캐릭터가 배치됨" : "클릭 또는 드래그해서 배치"}
                         >
                           <div style={styles.charCardLeft}>
                             <div style={styles.charName}>{char.name}</div>
@@ -719,12 +723,7 @@ export default function RaidDetailPage() {
                             {char.item_level?.toLocaleString() ?? "-"}
                           </div>
                           {placed && <div style={styles.placedBadge}>배치됨</div>}
-                          {weeklyLocked && !placed && (
-                            <div style={{ ...styles.placedBadge, color: "#a855f7" }}>주간 완료</div>
-                          )}
-                          {!placed && !weeklyLocked && userPlaced && (
-                            <div style={{ ...styles.placedBadge, color: "#ef4444" }}>배치 불가</div>
-                          )}
+                          {!placed && userPlaced && <div style={{ ...styles.placedBadge, color: "#ef4444" }}>배치 불가</div>}
                         </div>
                       );
                     })
@@ -743,6 +742,77 @@ export default function RaidDetailPage() {
             </div>
           </div>
         </div>
+
+        {/* ── 레이드 정보 수정 모달 ────────────── */}
+        {editModal && (() => {
+          const meta = RAID_META[raid.raid_id] || { difficulties: [raid.difficulty], maxSlots: raid.max_slots };
+          const diffColor2 = DIFF_COLORS[editForm.difficulty] || "#94a3b8";
+          const presets = [];
+          for (let n = 4; n <= meta.maxSlots; n += 4) presets.push(n);
+          return (
+            <div style={styles.modalOverlay} onClick={(e) => e.target === e.currentTarget && setEditModal(false)}>
+              <div style={styles.modalBox}>
+                <div style={styles.modalHeader}>
+                  <span style={styles.modalTitle}>레이드 정보 수정</span>
+                  <span style={styles.modalClose} onClick={() => setEditModal(false)}>✕</span>
+                </div>
+
+                {/* 난이도 */}
+                <div style={styles.modalSection}>
+                  <div style={styles.modalLabel}>난이도</div>
+                  <div style={styles.modalDiffRow}>
+                    {meta.difficulties.map((d) => (
+                      <div
+                        key={d}
+                        style={{
+                          ...styles.modalDiffBtn,
+                          borderColor: editForm.difficulty === d ? (DIFF_COLORS[d] || "#f59e0b") : "rgba(248,250,252,0.1)",
+                          color: editForm.difficulty === d ? (DIFF_COLORS[d] || "#f59e0b") : "#64748b",
+                          background: editForm.difficulty === d ? `${DIFF_COLORS[d] || "#f59e0b"}18` : "transparent",
+                        }}
+                        onClick={() => setEditForm((f) => ({ ...f, difficulty: d }))}
+                      >
+                        {d}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 모집 인원 */}
+                <div style={styles.modalSection}>
+                  <div style={styles.modalLabel}>모집 인원</div>
+                  <div style={styles.modalSlotRow}>
+                    {presets.map((n) => (
+                      <div
+                        key={n}
+                        style={{
+                          ...styles.modalSlotBtn,
+                          borderColor: editForm.max_slots === n ? "#f59e0b" : "rgba(248,250,252,0.1)",
+                          color: editForm.max_slots === n ? "#f59e0b" : "#64748b",
+                          background: editForm.max_slots === n ? "rgba(245,158,11,0.1)" : "transparent",
+                        }}
+                        onClick={() => setEditForm((f) => ({ ...f, max_slots: n }))}
+                      >
+                        {n}인
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 버튼 */}
+                <div style={styles.modalFooter}>
+                  <div style={styles.modalCancelBtn} onClick={() => setEditModal(false)}>취소</div>
+                  <div
+                    style={{ ...styles.modalSaveBtn, opacity: editSaving ? 0.6 : 1, cursor: editSaving ? "not-allowed" : "pointer" }}
+                    onClick={!editSaving ? handleEditSave : undefined}
+                  >
+                    {editSaving ? "저장 중..." : "저장"}
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* ── 토스트 ────────────────────────────── */}
         {toastMsg && (
@@ -1167,6 +1237,118 @@ const styles = {
     border: "1px solid rgba(248,250,252,0.06)",
     marginBottom: 6,
     transition: "all 0.2s",
+  },
+  // 수정 버튼
+  editBtn: {
+    fontSize: 12,
+    color: "#94a3b8",
+    cursor: "pointer",
+    padding: "6px 12px",
+    borderRadius: 8,
+    border: "1px solid rgba(248,250,252,0.1)",
+    transition: "all 0.2s",
+  },
+  // 모달 오버레이
+  modalOverlay: {
+    position: "fixed",
+    inset: 0,
+    background: "rgba(0,0,0,0.65)",
+    backdropFilter: "blur(4px)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 200,
+  },
+  modalBox: {
+    background: "rgba(15,23,42,0.98)",
+    border: "1px solid rgba(248,250,252,0.08)",
+    borderRadius: 16,
+    padding: "28px 28px 24px",
+    width: "100%",
+    maxWidth: 400,
+    boxShadow: "0 24px 60px rgba(0,0,0,0.6)",
+  },
+  modalHeader: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 24,
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: 700,
+    color: "#f1f5f9",
+  },
+  modalClose: {
+    fontSize: 18,
+    color: "#475569",
+    cursor: "pointer",
+    lineHeight: 1,
+  },
+  modalSection: {
+    marginBottom: 20,
+  },
+  modalLabel: {
+    fontSize: 11,
+    fontWeight: 700,
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: "0.08em",
+    marginBottom: 10,
+  },
+  modalDiffRow: {
+    display: "flex",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+  modalDiffBtn: {
+    padding: "7px 18px",
+    borderRadius: 20,
+    border: "1.5px solid",
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: "pointer",
+    transition: "all 0.18s",
+  },
+  modalSlotRow: {
+    display: "flex",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+  modalSlotBtn: {
+    padding: "7px 18px",
+    borderRadius: 8,
+    border: "1px solid",
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: "pointer",
+    transition: "all 0.18s",
+  },
+  modalFooter: {
+    display: "flex",
+    justifyContent: "flex-end",
+    gap: 8,
+    marginTop: 28,
+  },
+  modalCancelBtn: {
+    padding: "9px 20px",
+    borderRadius: 8,
+    border: "1px solid rgba(248,250,252,0.1)",
+    background: "rgba(30,41,59,0.6)",
+    color: "#94a3b8",
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: "pointer",
+  },
+  modalSaveBtn: {
+    padding: "9px 24px",
+    borderRadius: 8,
+    border: "none",
+    background: "linear-gradient(135deg, #f59e0b, #f97316)",
+    color: "#0f172a",
+    fontSize: 13,
+    fontWeight: 700,
+    boxShadow: "0 4px 16px rgba(245,158,11,0.3)",
   },
   // 토스트
   toast: {

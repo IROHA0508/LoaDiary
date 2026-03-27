@@ -6,11 +6,6 @@ import { getMyRaids, getJoinedRaids, deleteRaid, getSlots } from '../api/raids'
 import { useUser } from '../hooks/useUser'
 
 /* ─────────────────────────────────────────────
-   서포터 클래스 목록
-   ───────────────────────────────────────────── */
-const SUPPORT_CLASSES = new Set(['바드', '홀리나이트', '발키리', '워로드'])
-
-/* ─────────────────────────────────────────────
    난이도 배지 스타일
    ───────────────────────────────────────────── */
 const DIFF_STYLE = {
@@ -439,7 +434,7 @@ export default function MainPage() {
             ) : (
               <div>
                 {characters.map((char) => {
-                  const isSupport = SUPPORT_CLASSES.has(char.class_name)
+                  const isSupport = !!char.is_support
                   return (
                     <div
                       key={char.id}
