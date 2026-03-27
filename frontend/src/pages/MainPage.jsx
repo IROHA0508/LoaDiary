@@ -73,6 +73,9 @@ export default function MainPage() {
   // 레이드별 슬롯 데이터: { [raidId]: [{slot_order, ...}] }
   const [slotsMap, setSlotsMap] = useState({})
 
+  // ── [수정 1·3·4] 완료된 레이드 ID Set ──────────
+  const [completedRaids, setCompletedRaids] = useState(new Set())
+
   /* ── 데이터 조회 ──────────────────────────── */
   const { data: characters = [], isLoading: charLoading } = useQuery({
     queryKey: ['characters', fingerprint],
@@ -111,9 +114,18 @@ export default function MainPage() {
   ]
 
   // 순서 배열 기반으로 raids 정렬
-  const raids = raidOrder.length > 0
+  const baseRaids = raidOrder.length > 0
     ? raidOrder.map(id => rawRaids.find(r => r.id === id)).filter(Boolean)
     : rawRaids
+
+  // ── [수정 3] 완료된 레이드는 항상 맨 아래로 ──
+  const raids = [
+    ...baseRaids.filter(r => !completedRaids.has(r.id)),
+    ...baseRaids.filter(r => completedRaids.has(r.id)),
+  ]
+
+  // ── [수정 1] 완료 개수 ──────────────────────
+  const completedCount = completedRaids.size
 
   // raids가 확정되면 각 레이드의 슬롯 일괄 조회
   // rawRaids가 바뀔 때마다 새 레이드의 슬롯만 추가 조회
@@ -175,10 +187,37 @@ export default function MainPage() {
   /* ── 내가 만든 레이드 여부 ────────────────── */
   const isMyRaid = (raidId) => myRaids.some(r => r.id === raidId)
 
+  /* ── [수정 2] 완료 토글 ─────────────────── */
+  const toggleCompleted = (e, raidId) => {
+    e.stopPropagation()
+    setCompletedRaids(prev => {
+      const next = new Set(prev)
+      if (next.has(raidId)) {
+        next.delete(raidId)
+      } else {
+        next.add(raidId)
+      }
+      return next
+    })
+  }
+
   return (
     <div>
-      {/* ── 바디 레이아웃 — Layout 헤더와 동일한 max-w-6xl px-6 flex gap-5 ── */}
-      <div className="max-w-6xl mx-auto px-6 py-6 flex gap-5">
+      {/* ── 커스텀 스크롤바 스타일 ── */}
+      <style>{`
+        .raid-scroll::-webkit-scrollbar { width: 3px; }
+        .raid-scroll::-webkit-scrollbar-track { background: transparent; }
+        .raid-scroll::-webkit-scrollbar-thumb {
+          background: rgba(75, 85, 99, 0.45);
+          border-radius: 4px;
+        }
+        .raid-scroll::-webkit-scrollbar-thumb:hover {
+          background: rgba(107, 114, 128, 0.65);
+        }
+      `}</style>
+
+      {/* ── 바디 레이아웃 — Layout 헤더와 동일한 max-w-[1400px] px-8 flex gap-5 ── */}
+      <div className="max-w-[1400px] mx-auto px-8 py-6 flex gap-5">
 
         {/* ── 메인 영역 ──────────────────────── */}
         <main className="flex-1 min-w-0 flex flex-col gap-4">
@@ -187,7 +226,15 @@ export default function MainPage() {
           <section className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
             {/* 섹션 헤더 */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
-              <span className="text-sm font-medium text-gray-300">내 레이드</span>
+              {/* ── [수정 1] 헤더 왼쪽: 제목 + 완료 카운터 ── */}
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-medium text-gray-300">내 레이드</span>
+                {completedCount > 0 && (
+                  <span className="text-xs text-emerald-400/80 bg-emerald-400/10 border border-emerald-400/20 px-2 py-0.5 rounded-full">
+                    완료한 레이드 : {completedCount}개
+                  </span>
+                )}
+              </div>
               <button
                 onClick={() => navigate('/raids/new')}
                 className="text-xs text-gray-400 px-3 py-1 border border-gray-700 rounded-md hover:bg-gray-800 hover:text-white transition-colors"
@@ -210,84 +257,117 @@ export default function MainPage() {
                 </button>
               </div>
             ) : (
-              <div>
-                {raids.map((raid, index) => (
-                  <div
-                    key={raid.id}
-                    draggable
-                    onDragStart={() => handleDragStart(index)}
-                    onDragOver={(e) => handleDragOver(e, index)}
-                    onDrop={handleDrop}
-                    onDragEnd={handleDragEnd}
-                    onClick={() => navigate(`/raids/${raid.id}`)}
-                    className="flex items-center gap-3 px-4 py-3.5 border-b border-gray-800 last:border-b-0 hover:bg-gray-800/50 cursor-pointer transition-colors group"
-                  >
-                    {/* 드래그 핸들 */}
+              // ── [수정 5] 6개 초과 시 스크롤 ──────────────
+              <div
+                className="raid-scroll overflow-y-auto"
+                style={{ maxHeight: raids.length > 6 ? '336px' : 'none' }}
+              >
+                {raids.map((raid, index) => {
+                  const isDone = completedRaids.has(raid.id)
+                  return (
                     <div
-                      onClick={(e) => e.stopPropagation()}
-                      className="opacity-30 group-hover:opacity-70 transition-opacity"
+                      key={raid.id}
+                      draggable
+                      onDragStart={() => handleDragStart(index)}
+                      onDragOver={(e) => handleDragOver(e, index)}
+                      onDrop={handleDrop}
+                      onDragEnd={handleDragEnd}
+                      onClick={() => navigate(`/raids/${raid.id}`)}
+                      // ── [수정 4] 완료 시 시각적 변화 ─────────
+                      className={`flex items-center gap-3 px-4 py-3.5 border-b border-gray-800 last:border-b-0 transition-colors group cursor-pointer ${
+                        isDone
+                          ? 'bg-gray-800/30 hover:bg-gray-800/40 opacity-60'
+                          : 'hover:bg-gray-800/50'
+                      }`}
                     >
-                      <DragHandle />
-                    </div>
+                      {/* 드래그 핸들 */}
+                      <div
+                        onClick={(e) => e.stopPropagation()}
+                        className="opacity-30 group-hover:opacity-70 transition-opacity"
+                      >
+                        <DragHandle />
+                      </div>
 
-                    {/* 난이도 배지 — 고정 너비 */}
-                    <span
-                      className={`text-[10px] font-medium rounded-full py-0.5 text-center flex-shrink-0 ${DIFF_STYLE[raid.difficulty] || 'bg-gray-700 text-gray-300'}`}
-                      style={{ width: '64px' }}
-                    >
-                      {raid.difficulty}
-                    </span>
+                      {/* ── [수정 2] 완료 체크박스 ── */}
+                      <div
+                        onClick={(e) => toggleCompleted(e, raid.id)}
+                        className="flex-shrink-0 flex items-center justify-center w-4 h-4 rounded border transition-all"
+                        style={{
+                          borderColor: isDone ? '#10b981' : '#4b5563',
+                          backgroundColor: isDone ? '#10b981' : 'transparent',
+                        }}
+                      >
+                        {isDone && (
+                          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                            <path d="M2 5l2.5 2.5L8 3" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        )}
+                      </div>
 
-                    {/* 레이드 이름 */}
-                    <span className="flex-1 text-sm font-medium text-white truncate">
-                      {raid.raid_name}
-                    </span>
-
-                    {/* 슬롯 파이프 — 4개 단위로 파티 구분 */}
-                    <div className="flex items-center gap-1 flex-shrink-0">
-                      {Array.from({ length: raid.max_slots }).map((_, i) => {
-                        const isFilled = (slotsMap[raid.id] || [])
-                          .some(s => s.slot_order === i)
-                        // 4번째 슬롯 이후 첫 번째 (파티 경계)에 구분선 추가
-                        const isPartyBreak = i > 0 && i % 4 === 0
-                        return (
-                          <span key={i} className="flex items-center gap-1">
-                            {isPartyBreak && (
-                              <span className="block w-px h-3 bg-gray-700 mx-0.5 flex-shrink-0" />
-                            )}
-                            <span
-                              className={`block w-2 h-2 rounded-full flex-shrink-0 transition-colors ${
-                                isFilled ? 'bg-blue-400' : 'bg-gray-700'
-                              }`}
-                            />
-                          </span>
-                        )
-                      })}
-                    </div>
-
-                    {/* 내가 만든 / 참여 중 태그 */}
-                    {isMyRaid(raid.id) ? (
-                      <span className="text-xs text-blue-400 bg-blue-400/10 px-2 py-0.5 rounded flex-shrink-0">
-                        내가 만든
+                      {/* 난이도 배지 — 고정 너비 */}
+                      <span
+                        className={`text-[10px] font-medium rounded-full py-0.5 text-center flex-shrink-0 ${
+                          isDone
+                            ? 'bg-gray-700/50 text-gray-500'
+                            : (DIFF_STYLE[raid.difficulty] || 'bg-gray-700 text-gray-300')
+                        }`}
+                        style={{ width: '64px' }}
+                      >
+                        {raid.difficulty}
                       </span>
-                    ) : (
-                      <span className="text-xs text-gray-500 bg-gray-800 px-2 py-0.5 rounded flex-shrink-0">
-                        참여 중
-                      </span>
-                    )}
 
-                    {/* 삭제 / 나가기 버튼 */}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setRaidToDelete(raid)
-                      }}
-                      className="text-xs text-gray-600 hover:text-red-400 hover:bg-red-400/10 px-2 py-1 rounded transition-colors flex-shrink-0"
-                    >
-                      {isMyRaid(raid.id) ? '삭제' : '나가기'}
-                    </button>
-                  </div>
-                ))}
+                      {/* 레이드 이름 */}
+                      <span className={`flex-1 text-sm font-medium truncate ${isDone ? 'text-gray-500 line-through decoration-gray-600' : 'text-white'}`}>
+                        {raid.raid_name}
+                      </span>
+
+                      {/* 슬롯 파이프 — 4개 단위로 파티 구분 */}
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        {Array.from({ length: raid.max_slots }).map((_, i) => {
+                          const isFilled = (slotsMap[raid.id] || [])
+                            .some(s => s.slot_order === i)
+                          const isPartyBreak = i > 0 && i % 4 === 0
+                          return (
+                            <span key={i} className="flex items-center gap-1">
+                              {isPartyBreak && (
+                                <span className="block w-px h-3 bg-gray-700 mx-0.5 flex-shrink-0" />
+                              )}
+                              <span
+                                className={`block w-2 h-2 rounded-full flex-shrink-0 transition-colors ${
+                                  isDone
+                                    ? 'bg-gray-700'
+                                    : isFilled ? 'bg-blue-400' : 'bg-gray-700'
+                                }`}
+                              />
+                            </span>
+                          )
+                        })}
+                      </div>
+
+                      {/* 내가 만든 / 참여 중 태그 */}
+                      {isMyRaid(raid.id) ? (
+                        <span className={`text-xs px-2 py-0.5 rounded flex-shrink-0 ${isDone ? 'text-gray-600 bg-gray-800/50' : 'text-blue-400 bg-blue-400/10'}`}>
+                          내가 만든
+                        </span>
+                      ) : (
+                        <span className="text-xs text-gray-500 bg-gray-800 px-2 py-0.5 rounded flex-shrink-0">
+                          참여 중
+                        </span>
+                      )}
+
+                      {/* 삭제 / 나가기 버튼 */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setRaidToDelete(raid)
+                        }}
+                        className="text-xs text-gray-600 hover:text-red-400 hover:bg-red-400/10 px-2 py-1 rounded transition-colors flex-shrink-0"
+                      >
+                        {isMyRaid(raid.id) ? '삭제' : '나가기'}
+                      </button>
+                    </div>
+                  )
+                })}
               </div>
             )}
           </section>
@@ -331,7 +411,7 @@ export default function MainPage() {
             {/* 항해 */}
             <section className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
               <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
-                <span className="text-sm font-medium text-gray-300">⛵ 항해</span>
+                <span className="text-sm font-medium text-gray-300">⚠ 항해</span>
                 <span className="text-xs text-yellow-400 font-medium">준비 중</span>
               </div>
               <div className="px-4 py-3 text-sm text-gray-600">
@@ -342,18 +422,20 @@ export default function MainPage() {
           </div>
         </main>
 
-        {/* ── 캐릭터 사이드바 (오른쪽) — w-56으로 검색창과 너비 일치 ── */}
-        <aside className="w-56 flex-shrink-0">
+        {/* ── 사이드바: 내 원정대 목록 ───────── */}
+        <aside className="w-[300px] flex-shrink-0">
           <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-            {/* 사이드바 헤더 */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
-              <span className="text-sm font-medium text-gray-300">내 캐릭터</span>
-              <span className="text-xs text-gray-500">{characters.length}명</span>
+              <span className="text-sm font-medium text-gray-300">내 원정대</span>
+              {!charLoading && (
+                <span className="text-xs text-gray-500">{characters.length}명</span>
+              )}
             </div>
 
-            {/* 캐릭터 목록 */}
             {charLoading ? (
-              <div className="px-4 py-4 text-sm text-gray-500">불러오는 중...</div>
+              <div className="px-4 py-5 text-sm text-gray-500">불러오는 중...</div>
+            ) : characters.length === 0 ? (
+              <div className="px-4 py-5 text-sm text-gray-500">캐릭터가 없어요.</div>
             ) : (
               <div>
                 {characters.map((char) => {
@@ -361,33 +443,30 @@ export default function MainPage() {
                   return (
                     <div
                       key={char.id}
-                      className="flex items-center gap-2.5 px-4 py-2.5 border-b border-gray-800 last:border-b-0 hover:bg-gray-800/50 cursor-pointer transition-colors"
+                      className="flex items-center gap-3 px-4 py-2.5 border-b border-gray-800/60 last:border-b-0 hover:bg-gray-800/40 transition-colors"
                     >
-                      {/* 딜러/서포터 아이콘 */}
-                      <div className="flex-shrink-0 w-4 flex items-center justify-center">
+                      {/* 역할 아이콘 */}
+                      <div className="flex-shrink-0 w-5 h-5 flex items-center justify-center">
                         {isSupport ? <SupportIcon /> : <DealerIcon />}
                       </div>
 
                       {/* 캐릭터 정보 */}
                       <div className="flex-1 min-w-0">
-                        {/* 이름 + 클래스 */}
-                        <div className="flex items-baseline justify-between gap-1 mb-0.5">
+                        {/* 이름 + 클래스 — 같은 줄 */}
+                        <div className="flex items-baseline justify-between gap-2 mb-0.5">
                           <p className="text-sm font-medium text-white truncate leading-none">
                             {char.name}
                           </p>
                           <span className="text-xs text-gray-500 flex-shrink-0">{char.class_name}</span>
                         </div>
-                        {/* 아이템 레벨 + 전투력 — 같은 줄 왼쪽 정렬 */}
-                        <div className="flex items-center gap-2.5">
-                          <span className="text-xs text-blue-400 w-20 flex-shrink-0">Lv. {char.item_level?.toLocaleString()}</span>
+                        {/* 아이템 레벨 + 전투력 — 여유있게 표시 */}
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs text-blue-400 flex-shrink-0">Lv. {char.item_level?.toLocaleString()}</span>
                           {char.combat_power && (
-                            <>
-                              <span className="text-xs text-gray-700">·</span>
-                              <span className="text-xs text-gray-500 flex items-center gap-0.5">
-                                <span>⚔️</span>
-                                <span>{char.combat_power?.toLocaleString()}</span>
-                              </span>
-                            </>
+                            <span className="text-xs text-gray-400 flex items-center gap-0.5 flex-shrink-0">
+                              <span>⚔</span>
+                              <span>{char.combat_power?.toLocaleString()}</span>
+                            </span>
                           )}
                         </div>
                       </div>

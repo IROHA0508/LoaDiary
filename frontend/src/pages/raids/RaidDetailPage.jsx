@@ -67,7 +67,37 @@ const API = {
   // 멤버 제거
   removeMember: (raidId, userId) =>
     fetch(`/api/raids/${raidId}/members/${userId}`, { method: "DELETE" }),
+
+  // 동일 레이드 종류의 이번 주 슬롯 조회 (주간 참여 완료 체크용)
+  // raid_type: 레이드 종류 id (e.g. "serca", "kamen")
+  // week_start: 이번 주 수요일 06시 KST ISO 문자열
+  getWeeklyUsedSlots: (raidType, weekStart) =>
+    fetch(`/api/raids/weekly-used-slots?raid_type=${encodeURIComponent(raidType)}&week_start=${encodeURIComponent(weekStart)}`)
+      .then((r) => r.ok ? r.json() : [])
+      .catch(() => []),
 };
+
+/* ─────────────────────────────────────────────
+   주간 초기화 유틸 (수요일 06:00 KST)
+   ───────────────────────────────────────────── */
+function getWeeklyResetStart() {
+  // 현재 시각을 KST(UTC+9) 기준으로 계산
+  const now = new Date();
+  const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+  const day = kst.getUTCDay();   // 0=일 1=월 2=화 3=수 4=목 5=금 6=토
+  const hour = kst.getUTCHours();
+
+  // 가장 최근 수요일 06:00 KST를 구함
+  let daysBack = (day - 3 + 7) % 7;          // 수요일까지 며칠 전인지
+  if (daysBack === 0 && hour < 6) daysBack = 7; // 수요일이지만 06시 이전 → 지난 주 수요일
+
+  const reset = new Date(kst);
+  reset.setUTCDate(kst.getUTCDate() - daysBack);
+  reset.setUTCHours(6, 0, 0, 0);
+
+  // KST → UTC 로 변환해서 ISO 문자열 반환
+  return new Date(reset.getTime() - 9 * 60 * 60 * 1000).toISOString();
+}
 
 /* ─────────────────────────────────────────────
    파티 슬롯 계산 유틸
@@ -113,6 +143,30 @@ export default function RaidDetailPage() {
   const [searchInput, setSearchInput] = useState("");
   const [searchState, setSearchState] = useState(null); // null | "loading" | "done" | "error"
   const [searchError, setSearchError] = useState("");
+  // 자동 로드된 멤버 representative 목록 (배지 표시용)
+  const [autoLoadedReps, setAutoLoadedReps] = useState(new Set());
+  // 이번 주에 동일 레이드 종류에 이미 참여한 캐릭터 id 집합 (주간 잠금)
+  const [weeklyLockedCharIds, setWeeklyLockedCharIds] = useState(new Set());
+
+  /* ── 최근 멤버 localStorage 키 ─────────────── */
+  const recentMembersKey = raidId ? `raid_recent_members:${raidId}` : null;
+
+  const saveRecentMember = (representative) => {
+    if (!recentMembersKey) return;
+    try {
+      const prev = JSON.parse(localStorage.getItem(recentMembersKey) || "[]");
+      if (!prev.includes(representative)) {
+        localStorage.setItem(recentMembersKey, JSON.stringify([...prev, representative]));
+      }
+    } catch {}
+  };
+
+  const loadRecentMembers = () => {
+    if (!recentMembersKey) return [];
+    try {
+      return JSON.parse(localStorage.getItem(recentMembersKey) || "[]");
+    } catch { return []; }
+  };
 
   /* ── Realtime 구독 ──────────────────────────── */
   useEffect(() => {
@@ -177,6 +231,39 @@ export default function RaidDetailPage() {
         setSlots(slotsData);
         setMyCharacters(charsData);
         setMembers(membersData);
+
+        /* ── 주간 잠금 캐릭터 로드 ──────────────────
+           현재 레이드와 동일한 raid_id(종류)에 이번 주
+           이미 배치된 캐릭터들을 잠가 중복 참여를 방지.
+        ──────────────────────────────────────────── */
+        try {
+          const weekStart = getWeeklyResetStart();
+          const usedSlots = await API.getWeeklyUsedSlots(raidData.raid_id, weekStart);
+          // 현재 레이드 인스턴스(raidId)의 슬롯은 제외 — 현재 파티 내 배치는 허용
+          const lockedIds = new Set(
+            usedSlots
+              .filter((s) => s.raid_instance_id !== raidId)
+              .map((s) => s.character_id)
+          );
+          setWeeklyLockedCharIds(lockedIds);
+        } catch {}
+
+        /* ── 최근 멤버 자동 로드 ─────────────────── */
+        const recentReps = loadRecentMembers();
+        const existingReps = new Set(membersData.map((m) => m.representative));
+        const toAutoLoad = recentReps.filter((rep) => !existingReps.has(rep));
+        const autoLoaded = new Set();
+        for (const rep of toAutoLoad) {
+          try {
+            await API.addMember(raidId, rep, fingerprint);
+            autoLoaded.add(rep);
+          } catch {}
+        }
+        if (autoLoaded.size > 0) {
+          const refreshed = await API.getMembers(raidId);
+          setMembers(refreshed);
+          setAutoLoadedReps(autoLoaded);
+        }
       } catch (e) {
         setError(e.message);
       } finally {
@@ -270,6 +357,7 @@ export default function RaidDetailPage() {
 
     try {
       await API.addMember(raidId, name, fingerprint);
+      saveRecentMember(name);
       const updated = await API.getMembers(raidId);
       setMembers(updated);
       setSearchInput("");
@@ -319,8 +407,45 @@ export default function RaidDetailPage() {
     return false;
   };
 
-  // 드래그 불가 여부 (이미 배치됐거나 같은 유저의 캐릭터가 배치됨)
-  const isDraggable = (charId) => !isCharPlaced(charId) && !isUserAlreadyPlaced(charId);
+  // 주간 참여 완료 여부 (다른 레이드 인스턴스에서 이미 이번 주 참여)
+  const isWeeklyLocked = (charId) => weeklyLockedCharIds.has(charId);
+
+  // 드래그 불가 여부
+  const isDraggable = (charId) =>
+    !isCharPlaced(charId) && !isUserAlreadyPlaced(charId) && !isWeeklyLocked(charId);
+
+  /* ── 클릭으로 배치 / 제거 ──────────────────── */
+  const onCharClick = async (charId) => {
+    if (isUserAlreadyPlaced(charId)) return;
+    if (isWeeklyLocked(charId)) return;
+
+    const existingSlot = slots.find((s) => s.character_id === charId);
+    if (existingSlot) {
+      // 이미 배치됨 → 제거
+      await onRemoveFromSlot(existingSlot.id);
+      return;
+    }
+
+    // 빈 슬롯을 slotOrder 오름차순으로 탐색
+    const occupiedOrders = new Set(slots.map((s) => s.slot_order));
+    const totalSlots = raid?.max_slots ?? 0;
+    let targetOrder = null;
+    for (let i = 0; i < totalSlots; i++) {
+      if (!occupiedOrders.has(i)) { targetOrder = i; break; }
+    }
+    if (targetOrder === null) { showToast("빈 슬롯이 없습니다."); return; }
+
+    try {
+      const newSlot = await API.addSlot(raidId, {
+        character_id: charId,
+        slot_order: targetOrder,
+        role: null,
+      });
+      setSlots((prev) => [...prev, newSlot]);
+    } catch (e) {
+      showToast(e.message);
+    }
+  };
 
   /* ── 로딩 / 에러 ───────────────────────────── */
   if (loading) {
@@ -415,11 +540,12 @@ export default function RaidDetailPage() {
                           style={styles.slotCard(!!slot)}
                           onDragOver={(e) => e.preventDefault()}
                           onDrop={(e) => onSlotDrop(e, slotOrder)}
+                          onClick={() => slot && onRemoveFromSlot(slot.id)}
                           onContextMenu={(e) => {
                             e.preventDefault();
                             slot && onRemoveFromSlot(slot.id);
                           }}
-                          title={slot ? "우클릭으로 제거" : "캐릭터를 드래그해서 배치"}
+                          title={slot ? "클릭 또는 우클릭으로 제거" : "캐릭터를 클릭하거나 드래그해서 배치"}
                         >
                           {char ? (
                             <div
@@ -484,7 +610,7 @@ export default function RaidDetailPage() {
             </div>
 
             {/* 힌트 — 유저 추가와 원정대 사이 */}
-            <div style={styles.charHint}>클릭/드래그로 배치 · 우클릭으로 제거</div>
+            <div style={styles.charHint}>클릭으로 배치 · 우클릭으로 제거 · 드래그로 위치 조절</div>
 
             {/* 수평 스크롤 원정대 컬럼들 */}
             <div style={{ position: "relative" }}>
@@ -509,8 +635,13 @@ export default function RaidDetailPage() {
                   myCharacters.map((char) => {
                     const placed = isCharPlaced(char.id);
                     const userPlaced = isUserAlreadyPlaced(char.id);
+                    const weeklyLocked = isWeeklyLocked(char.id);
                     const draggable = isDraggable(char.id);
-                    const disabled = placed || userPlaced;
+                    const disabled = placed || userPlaced || weeklyLocked;
+                    const titleMsg = placed ? "이미 배치됨"
+                      : weeklyLocked ? "이번 주 해당 레이드 참여 완료"
+                      : userPlaced ? "같은 원정대 캐릭터가 배치됨"
+                      : "클릭 또는 드래그해서 배치";
                     return (
                       <div
                         key={char.id}
@@ -518,7 +649,7 @@ export default function RaidDetailPage() {
                         onDragStart={(e) => draggable && onCharDragStart(e, char.id)}
                         onClick={() => onCharClick(char.id)}
                         style={styles.charCard(disabled)}
-                        title={placed ? "이미 배치됨" : userPlaced ? "같은 원정대 캐릭터가 배치됨" : "클릭 또는 드래그해서 배치"}
+                        title={titleMsg}
                       >
                         <div style={styles.charCardLeft}>
                           <div style={styles.charName}>{char.name}</div>
@@ -528,7 +659,12 @@ export default function RaidDetailPage() {
                           {char.item_level?.toLocaleString() ?? "-"}
                         </div>
                         {placed && <div style={styles.placedBadge}>배치됨</div>}
-                        {!placed && userPlaced && <div style={{ ...styles.placedBadge, color: "#ef4444" }}>배치 불가</div>}
+                        {weeklyLocked && !placed && (
+                          <div style={{ ...styles.placedBadge, color: "#a855f7" }}>주간 완료</div>
+                        )}
+                        {!placed && !weeklyLocked && userPlaced && (
+                          <div style={{ ...styles.placedBadge, color: "#ef4444" }}>배치 불가</div>
+                        )}
                       </div>
                     );
                   })
@@ -539,7 +675,12 @@ export default function RaidDetailPage() {
               {members.map((member) => (
                 <div key={member.user_id} style={styles.charColumn}>
                   <div style={styles.charColumnHeader}>
-                    <div style={styles.charGroupLabel}>{member.representative}</div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
+                      <div style={styles.charGroupLabel}>{member.representative}</div>
+                      {autoLoadedReps.has(member.representative) && (
+                        <span style={styles.autoLoadedBadge}>자동 로드</span>
+                      )}
+                    </div>
                     <div
                       style={styles.removeMemberBtn}
                       onClick={() => handleRemoveMember(member.user_id)}
@@ -554,8 +695,13 @@ export default function RaidDetailPage() {
                     member.characters.map((char) => {
                       const placed = isCharPlaced(char.id);
                       const userPlaced = isUserAlreadyPlaced(char.id);
+                      const weeklyLocked = isWeeklyLocked(char.id);
                       const draggable = isDraggable(char.id);
-                      const disabled = placed || userPlaced;
+                      const disabled = placed || userPlaced || weeklyLocked;
+                      const titleMsg = placed ? "이미 배치됨"
+                        : weeklyLocked ? "이번 주 해당 레이드 참여 완료"
+                        : userPlaced ? "같은 원정대 캐릭터가 배치됨"
+                        : "클릭 또는 드래그해서 배치";
                       return (
                         <div
                           key={char.id}
@@ -563,7 +709,7 @@ export default function RaidDetailPage() {
                           onDragStart={(e) => draggable && onCharDragStart(e, char.id)}
                           onClick={() => onCharClick(char.id)}
                           style={styles.charCard(disabled)}
-                          title={placed ? "이미 배치됨" : userPlaced ? "같은 원정대 캐릭터가 배치됨" : "클릭 또는 드래그해서 배치"}
+                          title={titleMsg}
                         >
                           <div style={styles.charCardLeft}>
                             <div style={styles.charName}>{char.name}</div>
@@ -573,7 +719,12 @@ export default function RaidDetailPage() {
                             {char.item_level?.toLocaleString() ?? "-"}
                           </div>
                           {placed && <div style={styles.placedBadge}>배치됨</div>}
-                          {!placed && userPlaced && <div style={{ ...styles.placedBadge, color: "#ef4444" }}>배치 불가</div>}
+                          {weeklyLocked && !placed && (
+                            <div style={{ ...styles.placedBadge, color: "#a855f7" }}>주간 완료</div>
+                          )}
+                          {!placed && !weeklyLocked && userPlaced && (
+                            <div style={{ ...styles.placedBadge, color: "#ef4444" }}>배치 불가</div>
+                          )}
                         </div>
                       );
                     })
@@ -981,6 +1132,17 @@ const styles = {
     color: "#334155",
     padding: "8px 0",
     textAlign: "center",
+  },
+  autoLoadedBadge: {
+    display: "inline-block",
+    fontSize: 9,
+    fontWeight: 700,
+    color: "#22c55e",
+    background: "rgba(34,197,94,0.12)",
+    border: "1px solid rgba(34,197,94,0.25)",
+    borderRadius: 4,
+    padding: "1px 5px",
+    letterSpacing: "0.03em",
   },
   charGroupLabel: {
     fontSize: 11,

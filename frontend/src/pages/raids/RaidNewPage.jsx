@@ -249,7 +249,6 @@ export default function RaidNewPage() {
   const handleSubmit = async () => {
     setIsSubmitting(true);
     try {
-      // const fingerprint = localStorage.getItem("fingerprint") || "unknown";
       const res = await fetch("/api/raids/", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -263,7 +262,7 @@ export default function RaidNewPage() {
       });
       if (!res.ok) throw new Error("레이드 생성 실패");
       const data = await res.json();
-      setSubmitResult({ ok: true, data });
+      navigate(`/raids/${data.id}`);
     } catch (e) {
       setSubmitResult({ ok: false, error: e.message });
     } finally {
@@ -835,33 +834,11 @@ export default function RaidNewPage() {
 
     return (
       <div key={fadeKey} style={styles.fadeIn}>
-        {submitResult ? (
+        {submitResult && !submitResult.ok ? (
           <div style={styles.resultBox}>
-            <div style={styles.resultIcon}>{submitResult.ok ? "🎉" : "⚠️"}</div>
-            <div style={styles.resultTitle}>
-              {submitResult.ok ? "레이드가 생성되었습니다!" : "생성에 실패했습니다"}
-            </div>
-            <div style={styles.resultDesc}>
-              {submitResult.ok
-                ? "이제 슬롯에 캐릭터를 배치할 수 있습니다."
-                : submitResult.error}
-            </div>
-            {submitResult.ok && (
-              <div
-                style={{
-                  ...styles.btnPrimary(false),
-                  marginTop: 16,
-                  display: "inline-block",
-                  padding: "12px 32px",
-                  cursor: "pointer",
-                }}
-                onClick={() => {
-                  navigate(`/raids/${submitResult.data?.id}`)
-                }}
-              >
-                레이드로 이동 →
-              </div>
-            )}
+            <div style={styles.resultIcon}>⚠️</div>
+            <div style={styles.resultTitle}>생성에 실패했습니다</div>
+            <div style={styles.resultDesc}>{submitResult.error}</div>
           </div>
         ) : (
           <>
@@ -975,7 +952,8 @@ export default function RaidNewPage() {
           <div style={styles.body}>{stepContent[step]()}</div>
 
           {/* Footer */}
-          {!submitResult && (
+          {/* Footer — 에러 상태에도 재시도 가능하도록 항상 표시 */}
+          {(!submitResult || !submitResult.ok) && (
             <div style={styles.footer}>
               {step > 1 ? (
                 <div style={styles.btnSecondary} onClick={prev}>
