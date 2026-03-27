@@ -25,36 +25,109 @@ const CATEGORY_LABELS = {
 };
 
 /* ─────────────────────────────────────────────
-   레이드 데이터 (엑셀 기반)
-   ───────────────────────────────────────────── */
+  레이드 데이터 (엑셀 기반)
+───────────────────────────────────────────── */
 const RAIDS = [
-  // ── 어비스 레이드 ───────────────────────────
+  // ── 최신 레이드부터 오래된 레이드 순으로 정렬 ─────────
+  // 카테고리 필터를 적용해도 아래 배열 순서를 그대로 유지한다.
+
+  // ── 어비스 던전 ─────────────────────────────
+  // 지평의 성당: 노말/하드가 아닌 1단계/2단계/3단계로 구분
   {
-    id: "argos", category: "abyss_raid",
-    name: "아르고스", gates: 3, image: "🏛️",
-    difficulties: ["노말"], maxSlots: 8,
-    entryLevel: { 노말: 1370 },
+    id: "cathedral", category: "abyss_dungeon",
+    name: "지평의 성당", gates: 2, image: "⛪",
+    difficulties: ["1단계", "2단계", "3단계"], maxSlots: 4,
+    entryLevel: { "1단계": 1700, "2단계": 1720, "3단계": 1750 },
+  },
+
+  // ── 그림자 레이드 ───────────────────────────
+  // 세르카: 노말 / 하드 / 나이트메어 3단계 난이도
+  {
+    id: "serca", category: "shadow",
+    name: "세르카", gates: 2, image: "🌙",
+    difficulties: ["노말", "하드", "나이트메어"], maxSlots: 4,
+    entryLevel: { 노말: 1710, 하드: 1730, 나이트메어: 1740 },
+  },
+
+  // ── 카제로스 레이드 ─────────────────────────
+  {
+    id: "kazeroth_boss", category: "kazeroth",
+    name: "카제로스", gates: 2, image: "🌀",
+    difficulties: ["노말", "하드"], maxSlots: 8,
+    entryLevel: { 노말: 1710, 하드: 1730 },
+  },
+  {
+    id: "armorche", category: "kazeroth",
+    name: "아르모체", gates: 2, image: "⚡",
+    difficulties: ["노말", "하드"], maxSlots: 8,
+    entryLevel: { 노말: 1700, 하드: 1720 },
+  },
+  {
+    id: "mordoom", category: "kazeroth",
+    name: "모르둠", gates: 3, image: "🕳️",
+    difficulties: ["노말", "하드"], maxSlots: 8,
+    entryLevel: { 노말: 1680, 하드: 1700 },
+  },
+  {
+    id: "abrelshud_kazeroth", category: "kazeroth",
+    name: "아브렐슈드", tag: "카제로스", gates: 2, image: "👁️‍🗨️",
+    difficulties: ["노말", "하드"], maxSlots: 8,
+    entryLevel: { 노말: 1670, 하드: 1690 },
+  },
+  {
+    id: "egir", category: "kazeroth",
+    name: "에기르", gates: 2, image: "🌊",
+    difficulties: ["노말", "하드"], maxSlots: 8,
+    entryLevel: { 노말: 1660, 하드: 1680 },
+  },
+
+  // ── 에픽 레이드 ─────────────────────────────
+  {
+    id: "behemoth", category: "epic",
+    name: "베히모스", gates: 2, image: "🦣",
+    difficulties: ["노말"], maxSlots: 16,
+    entryLevel: { 노말: 1640 },
+  },
+  {
+    id: "echidna", category: "kazeroth",
+    name: "에키드나", gates: 2, image: "🐲",
+    difficulties: ["노말", "하드"], maxSlots: 8,
+    entryLevel: { 노말: 1620, 하드: 1640 },
   },
 
   // ── 군단장 레이드 ───────────────────────────
   {
-    id: "valtan", category: "legion",
-    name: "발탄", gates: 2, image: "⚔️",
+    id: "kamen", category: "legion",
+    name: "카멘", gates: 4, image: "💀",
     difficulties: ["노말", "하드"], maxSlots: 8,
-    entryLevel: { 노말: 1415, 하드: 1445 },
+    entryLevel: { 노말: 1610, 하드: 1630 },
   },
+
+  // ── 어비스 던전 ─────────────────────────────
   {
-    id: "biackiss", category: "legion",
-    name: "비아키스", gates: 2, image: "🐍",
+    id: "tower_chaos", category: "abyss_dungeon",
+    name: "혼돈의 상아탑", gates: 2, image: "🗼",
+    difficulties: ["노말", "하드"], maxSlots: 4,
+    entryLevel: { 노말: 1600, 하드: 1620 },
+  },
+
+  // ── 군단장 레이드 ───────────────────────────
+  {
+    id: "illiakan", category: "legion",
+    name: "일리아칸", gates: 3, image: "🌑",
     difficulties: ["노말", "하드"], maxSlots: 8,
-    entryLevel: { 노말: 1430, 하드: 1460 },
+    entryLevel: { 노말: 1580, 하드: 1600 },
   },
+
+  // ── 어비스 던전 ─────────────────────────────
   {
-    id: "koukusaton", category: "legion",
-    name: "쿠크세이튼", gates: 3, image: "🎭",
-    difficulties: ["노말"], maxSlots: 4,
-    entryLevel: { 노말: 1475 },
+    id: "kayangel", category: "abyss_dungeon",
+    name: "카양겔", gates: 2, image: "💎",
+    difficulties: ["노말", "하드"], maxSlots: 4,
+    entryLevel: { 노말: 1540, 하드: 1580 },
   },
+
+  // ── 군단장 레이드 ───────────────────────────
   {
     id: "abrelshud_legion", category: "legion",
     name: "아브렐슈드", tag: "군단장", gates: 4, image: "👁️",
@@ -68,91 +141,38 @@ const RAIDS = [
     },
   },
   {
-    id: "illiakan", category: "legion",
-    name: "일리아칸", gates: 3, image: "🌑",
-    difficulties: ["노말", "하드"], maxSlots: 8,
-    entryLevel: { 노말: 1580, 하드: 1600 },
+    id: "koukusaton", category: "legion",
+    name: "쿠크세이튼", gates: 3, image: "🎭",
+    difficulties: ["노말"], maxSlots: 4,
+    entryLevel: { 노말: 1475 },
   },
   {
-    id: "kamen", category: "legion",
-    name: "카멘", gates: 4, image: "💀",
+    id: "biackiss", category: "legion",
+    name: "비아키스", gates: 2, image: "🐍",
     difficulties: ["노말", "하드"], maxSlots: 8,
-    entryLevel: { 노말: 1610, 하드: 1630 },
+    entryLevel: { 노말: 1430, 하드: 1460 },
+  },
+  {
+    id: "valtan", category: "legion",
+    name: "발탄", gates: 2, image: "⚔️",
+    difficulties: ["노말", "하드"], maxSlots: 8,
+    entryLevel: { 노말: 1415, 하드: 1445 },
   },
 
-  // ── 카제로스 레이드 ─────────────────────────
+  // ── 어비스 레이드 ───────────────────────────
   {
-    id: "echidna", category: "kazeroth",
-    name: "에키드나", gates: 2, image: "🐲",
-    difficulties: ["노말", "하드"], maxSlots: 8,
-    entryLevel: { 노말: 1620, 하드: 1640 },
-  },
-  {
-    id: "egir", category: "kazeroth",
-    name: "에기르", gates: 2, image: "🌊",
-    difficulties: ["노말", "하드"], maxSlots: 8,
-    entryLevel: { 노말: 1660, 하드: 1680 },
-  },
-  {
-    id: "abrelshud_kazeroth", category: "kazeroth",
-    name: "아브렐슈드", tag: "카제로스", gates: 2, image: "👁️‍🗨️",
-    difficulties: ["노말", "하드"], maxSlots: 8,
-    entryLevel: { 노말: 1670, 하드: 1690 },
-  },
-  {
-    id: "mordoom", category: "kazeroth",
-    name: "모르둠", gates: 3, image: "🕳️",
-    difficulties: ["노말", "하드"], maxSlots: 8,
-    entryLevel: { 노말: 1680, 하드: 1700 },
-  },
-  {
-    id: "armorche", category: "kazeroth",
-    name: "아르모체", gates: 2, image: "⚡",
-    difficulties: ["노말", "하드"], maxSlots: 8,
-    entryLevel: { 노말: 1700, 하드: 1720 },
-  },
-  {
-    id: "kazeroth_boss", category: "kazeroth",
-    name: "카제로스", gates: 2, image: "🌀",
-    difficulties: ["노말", "하드"], maxSlots: 8,
-    entryLevel: { 노말: 1710, 하드: 1730 },
-  },
-
-  // ── 에픽 레이드 ─────────────────────────────
-  {
-    id: "behemoth", category: "epic",
-    name: "베히모스", gates: 2, image: "🦣",
-    difficulties: ["노말"], maxSlots: 16,
-    entryLevel: { 노말: 1640 },
-  },
-
-  // ── 그림자 레이드 ───────────────────────────
-  // 세르카: 노말 / 하드 / 나이트메어 3단계 난이도
-  {
-    id: "serca", category: "shadow",
-    name: "세르카", gates: 2, image: "🌙",
-    difficulties: ["노말", "하드", "나이트메어"], maxSlots: 4,
-    entryLevel: { 노말: 1710, 하드: 1730, 나이트메어: 1740 },
+    id: "argos", category: "abyss_raid",
+    name: "아르고스", gates: 3, image: "🏛️",
+    difficulties: ["노말"], maxSlots: 8,
+    entryLevel: { 노말: 1370 },
   },
 
   // ── 어비스 던전 ─────────────────────────────
   {
-    id: "elvalria", category: "abyss_dungeon",
-    name: "고대 유적 엘베리아", gates: 2, image: "🏺",
-    difficulties: ["노말"], maxSlots: 4,
-    entryLevel: { 노말: 500 },
-  },
-  {
-    id: "dream_palace", category: "abyss_dungeon",
-    name: "몽환의 궁전", gates: 2, image: "🏯",
-    difficulties: ["노말"], maxSlots: 4,
-    entryLevel: { 노말: 635 },
-  },
-  {
-    id: "ark_arrogance", category: "abyss_dungeon",
-    name: "오만의 방주", gates: 2, image: "⛵",
-    difficulties: ["노말"], maxSlots: 4,
-    entryLevel: { 노말: 805 },
+    id: "oreha", category: "abyss_dungeon",
+    name: "오레하의 우물", gates: 2, image: "🔮",
+    difficulties: ["노말", "하드"], maxSlots: 4,
+    entryLevel: { 노말: 1340, 하드: 1370 },
   },
   {
     id: "gate_paradise", category: "abyss_dungeon",
@@ -161,29 +181,22 @@ const RAIDS = [
     entryLevel: { 노말: 960 },
   },
   {
-    id: "oreha", category: "abyss_dungeon",
-    name: "오레하의 우물", gates: 2, image: "🔮",
-    difficulties: ["노말", "하드"], maxSlots: 4,
-    entryLevel: { 노말: 1340, 하드: 1370 },
+    id: "ark_arrogance", category: "abyss_dungeon",
+    name: "오만의 방주", gates: 2, image: "⛵",
+    difficulties: ["노말"], maxSlots: 4,
+    entryLevel: { 노말: 805 },
   },
   {
-    id: "kayangel", category: "abyss_dungeon",
-    name: "카양겔", gates: 2, image: "💎",
-    difficulties: ["노말", "하드"], maxSlots: 4,
-    entryLevel: { 노말: 1540, 하드: 1580 },
+    id: "dream_palace", category: "abyss_dungeon",
+    name: "몽환의 궁전", gates: 2, image: "🏯",
+    difficulties: ["노말"], maxSlots: 4,
+    entryLevel: { 노말: 635 },
   },
   {
-    id: "tower_chaos", category: "abyss_dungeon",
-    name: "혼돈의 상아탑", gates: 2, image: "🗼",
-    difficulties: ["노말", "하드"], maxSlots: 4,
-    entryLevel: { 노말: 1600, 하드: 1620 },
-  },
-  // 지평의 성당: 노말/하드가 아닌 1단계/2단계/3단계로 구분
-  {
-    id: "cathedral", category: "abyss_dungeon",
-    name: "지평의 성당", gates: 2, image: "⛪",
-    difficulties: ["1단계", "2단계", "3단계"], maxSlots: 4,
-    entryLevel: { "1단계": 1700, "2단계": 1720, "3단계": 1750 },
+    id: "elvalria", category: "abyss_dungeon",
+    name: "고대 유적 엘베리아", gates: 2, image: "🏺",
+    difficulties: ["노말"], maxSlots: 4,
+    entryLevel: { 노말: 500 },
   },
 ];
 
@@ -592,6 +605,7 @@ export default function RaidNewPage() {
 
   /* ── Step 1: 레이드 선택 ─────────────────── */
   const renderStep1 = () => {
+    // 카테고리 필터를 적용해도 RAIDS 배열의 최신순 정렬을 그대로 유지
     const filtered = categoryFilter === "all"
       ? RAIDS
       : RAIDS.filter((r) => r.category === categoryFilter);

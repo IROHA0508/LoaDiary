@@ -497,42 +497,51 @@ export default function RaidDetailPage() {
 
         {/* ── 헤더 ──────────────────────────────── */}
         <div style={styles.header}>
-          <div style={styles.backBtn} onClick={() => navigate("/")}>← 뒤로</div>
+          <div style={styles.backBtnWrap}>
+            <div style={styles.backBtn} onClick={() => navigate("/")}>← 뒤로</div>
+          </div>
+
           <div style={styles.headerCenter}>
             <div style={styles.raidTitle}>{raid.raid_name}</div>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 6 }}>
-              <span style={{ ...styles.diffBadge, borderColor: diffColor, color: diffColor }}>
-                {raid.difficulty}
-              </span>
-              <span style={styles.headerMeta}>·</span>
-              <span style={styles.headerMeta}>{raid.max_slots}인 모집</span>
-            </div>
-          </div>
-          <div style={styles.deleteBtnWrap}>
-            <div
-              style={styles.doneBtn}
-              onClick={() => navigate("/")}
-            >
-              ✓ 배치 완료
-            </div>
-            <div
-              style={styles.editBtn}
-              onClick={() => {
-                setEditForm({ difficulty: raid.difficulty, max_slots: raid.max_slots });
-                setEditModal(true);
-              }}
-            >
-              ✏ 수정
-            </div>
-            <div
-              style={styles.deleteBtn}
-              onClick={async () => {
-                if (!confirm("레이드를 삭제할까요?")) return;
-                await fetch(`/api/raids/${raidId}`, { method: "DELETE" });
-                navigate("/");
-              }}
-            >
-              삭제
+
+            {/* 난이도/모집 정보는 제목 아래 가운데 정렬 유지 */}
+            <div style={styles.headerBottomRow}>
+              <div style={styles.headerInfoRow}>
+                <span style={{ ...styles.diffBadge, borderColor: diffColor, color: diffColor }}>
+                  {raid.difficulty}
+                </span>
+                <span style={styles.headerMeta}>·</span>
+                <span style={styles.headerMeta}>{raid.max_slots}인 모집</span>
+              </div>
+
+              {/* 액션 버튼은 본문 레이아웃 우측 끝선보다 살짝 안쪽으로 배치 */}
+              <div style={styles.headerActionRow}>
+                <div
+                  style={styles.doneBtn}
+                  onClick={() => navigate("/")}
+                >
+                  ✓ 배치 완료
+                </div>
+                <div
+                  style={styles.editBtn}
+                  onClick={() => {
+                    setEditForm({ difficulty: raid.difficulty, max_slots: raid.max_slots });
+                    setEditModal(true);
+                  }}
+                >
+                  ✏ 수정
+                </div>
+                <div
+                  style={styles.deleteBtn}
+                  onClick={async () => {
+                    if (!confirm("레이드를 삭제할까요?")) return;
+                    await fetch(`/api/raids/${raidId}`, { method: "DELETE" });
+                    navigate("/");
+                  }}
+                >
+                  삭제
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -864,16 +873,19 @@ const styles = {
   },
   // 헤더
   header: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: "20px 28px",
+    padding: "20px 40px",
     borderBottom: "1px solid rgba(248,250,252,0.06)",
     background: "rgba(15,23,42,0.8)",
     backdropFilter: "blur(12px)",
     position: "sticky",
     top: 0,
     zIndex: 10,
+  },
+  backBtnWrap: {
+    position: "absolute",
+    left: 20,
+    top: "50%",
+    transform: "translateY(-50%)",
   },
   backBtn: {
     fontSize: 13,
@@ -886,13 +898,21 @@ const styles = {
     whiteSpace: "nowrap",
   },
   headerCenter: {
-    textAlign: "center",
-    flex: 1,
+    width: "100%",
+    maxWidth: 1100,
+    margin: "0 auto",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: 10,
     padding: "0 16px",
+    boxSizing: "border-box",
+    minWidth: 0,
   },
   raidTitle: {
     fontSize: 22,
     fontWeight: 800,
+    textAlign: "center",
     background: "linear-gradient(135deg, #f59e0b, #f97316)",
     WebkitBackgroundClip: "text",
     WebkitTextFillColor: "transparent",
@@ -910,7 +930,32 @@ const styles = {
     fontSize: 12,
     color: "#94a3b8",
   },
-  deleteBtnWrap: { display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 8, minWidth: 140 },
+  headerBottomRow: {
+    position: "relative",
+    width: "100%",
+    minHeight: 32,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  headerInfoRow: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    minWidth: 0,
+  },
+  headerActionRow: {
+    position: "absolute",
+    right: 32,
+    top: "50%",
+    transform: "translateY(-50%)",
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+    justifyContent: "flex-end",
+  },
   doneBtn: {
     fontSize: 12,
     color: "#0f172a",

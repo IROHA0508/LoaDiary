@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel
 from typing import List
 from datetime import datetime, timezone
 from app.schemas import (
@@ -13,6 +14,12 @@ from app.lostark import get_characters, parse_characters
 
 # 라우터 생성
 router = APIRouter()
+
+# 레이드 수정 요청 바디
+class RaidUpdate(BaseModel):
+  difficulty: str
+  max_slots: int
+
 
 # 레이드 생성
 @router.post("/", response_model = RaidResponse, status_code = 201)
@@ -150,6 +157,62 @@ async def get_weekly_used_slots(
     {"raid_instance_id": s["raid_id"], "character_id": s["character_id"]}
     for s in slot_result.data
   ]
+
+# 레이드 수정
+@router.patch("/{raid_id}", response_model=RaidResponse)
+async def update_raid(raid_id: str, payload: RaidUpdate):
+  # 수정 대상 레이드 존재 여부 확인
+  raid_result = (
+    supabase.table("raids")
+    .select("*")
+    .eq("id", raid_id)
+    .execute()
+  )
+
+  if not raid_result.data:
+    raise HTTPException(status_code=404, detail="레이드를 찾을 수 없습니다.")
+
+  current_raid = raid_result.data[0]
+
+  # 최대 슬롯 수를 줄일 때, 이미 배치된 슬롯보다 작게는 변경할 수 없음
+  current_slot_result = (
+    supabase.table("raid_slots")
+    .select("id", count="exact")
+    .eq("raid_id", raid_id)
+    .execute()
+  )
+
+  current_slot_count = current_slot_result.count or 0
+  if payload.max_slots < current_slot_count:
+    raise HTTPException(
+      status_code=400,
+      detail=f"현재 {current_slot_count}명이 배치되어 있어 {payload.max_slots}인으로 줄일 수 없습니다."
+    )
+
+  updated = (
+    supabase.table("raids")
+    .update({
+      "difficulty": payload.difficulty,
+      "max_slots": payload.max_slots,
+    })
+    .eq("id", raid_id)
+    .execute()
+  )
+
+  if not updated.data:
+    raise HTTPException(status_code=500, detail="레이드 수정에 실패했습니다.")
+
+  # 축소된 슬롯 수보다 뒤에 있는 빈 슬롯 데이터가 있다면 정리
+  if payload.max_slots < current_raid["max_slots"]:
+    (
+      supabase.table("raid_slots")
+      .delete()
+      .eq("raid_id", raid_id)
+      .gte("slot_order", payload.max_slots)
+      .execute()
+    )
+
+  return updated.data[0]
 
 # 단일 레이드 조회
 @router.get("/{raid_id}", response_model=RaidResponse)
