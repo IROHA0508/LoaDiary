@@ -696,7 +696,7 @@ export default function RaidNewPage() {
                 <div style={{ ...styles.diffLabel, color }}>{diff}</div>
                 {level && (
                   <div style={styles.diffEntryLevel}>
-                    Lv.{level.toLocaleString()}
+                    Lv. {level.toLocaleString()}
                   </div>
                 )}
               </div>

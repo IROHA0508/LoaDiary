@@ -17,9 +17,9 @@ import OnboardingPage from './pages/OnboardingPage'
 import MainPage from './pages/MainPage'
 import RaidNewPage from './pages/raids/RaidNewPage'
 import RaidDetailPage from './pages/raids/RaidDetailPage'
-import RankingPage from './pages/headers/RankingPage'
-import MarketPage from './pages/headers/MarketPage'
-import MerchantPage from './pages/headers/MerchantPage'
+import RankingPage from './pages/features/RankingPage'
+import MarketPage from './pages/features/MarketPage'
+import MerchantPage from './pages/features/MerchantPage'
 
 // QueryClient 인스턴스 생성
 const queryClient = new QueryClient()
