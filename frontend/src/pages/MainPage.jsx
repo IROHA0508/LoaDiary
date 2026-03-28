@@ -8,9 +8,8 @@ import { useUser } from '../hooks/useUser'
 /* ─────────────────────────────────────────────
    레이드 섹션 레이아웃 상수
    ───────────────────────────────────────────── */
-const RAID_ROW_HEIGHT = 112        // 레이드 1행 높이(px) — py-3.5(14px*2) + 내용
-const RAID_SCROLL_THRESHOLD = 5   // 이 개수부터 스크롤 활성화
-const RAID_SECTION_HEIGHT = RAID_ROW_HEIGHT * RAID_SCROLL_THRESHOLD  // 280px
+const RAID_SCROLL_THRESHOLD = 6   // 이 개수 이상이면 스크롤 활성화
+const RAID_SECTION_MAX_HEIGHT = 672  // 스크롤 활성화 시 섹션 최대 높이(px)
 
 /* ─────────────────────────────────────────────
    난이도 배지 스타일
@@ -400,7 +399,6 @@ export default function MainPage() {
               <div
                 className="raid-scroll overflow-y-auto"
                 style={{
-                  minHeight: `${RAID_SECTION_HEIGHT}px`,
                   maxHeight: raids.length >= RAID_SCROLL_THRESHOLD ? `${RAID_SECTION_HEIGHT}px` : 'none',
                 }}
               >
@@ -431,8 +429,13 @@ export default function MainPage() {
                     return { partyIndex: pi, slots }
                   })
 
-                  // 배치된 캐릭터가 하나라도 있는 파티만 표시
-                  const filledParties = parties.filter(p => p.slots.some(s => s.char?.name))
+                  // 내 캐릭터가 배치된 경우에만 파티 섹션 표시
+                  // (내 캐릭터 없이 다른 멤버만 배치된 경우엔 숨김)
+                  const myCharIds = new Set(characters.map(c => c.id))
+                  const iHavePlaced = raidSlots.some(s => myCharIds.has(s.character_id))
+                  const filledParties = iHavePlaced
+                    ? parties.filter(p => p.slots.some(s => s.char?.name))
+                    : []
 
                   return (
                     <div
@@ -774,7 +777,7 @@ export default function MainPage() {
               {isMyRaid(raidToDelete.id) ? '레이드 삭제' : '레이드 나가기'}
             </h3>
             <p className="text-sm text-gray-400">
-              <span className="text-white font-medium">{raidToDelete.raid_name} / {raidToDelete.difficulty}</span>
+              <span className="text-white font-medium">{raidToDelete.raid_name}</span>
               {isMyRaid(raidToDelete.id) ? (
                 <> 레이드를 삭제할까요?<br />이 작업은 되돌릴 수 없어요.</>
               ) : (
