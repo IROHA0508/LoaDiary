@@ -78,7 +78,29 @@ const API = {
   // 멤버 제거
   removeMember: (raidId, userId) =>
     fetch(`/api/raids/${raidId}/members/${userId}`, { method: "DELETE" }),
+
+  // 주간 중복 참여 슬롯 조회
+  getWeeklyUsedSlots: (raidType, weekStart) =>
+    fetch(`/api/raids/weekly-used-slots?raid_type=${raidType}&week_start=${encodeURIComponent(weekStart)}`)
+      .then((r) => r.json()),
 };
+
+/* ─────────────────────────────────────────────
+   주간 초기화 시각 계산 (수요일 오전 6시 KST = 화요일 21:00 UTC)
+   ───────────────────────────────────────────── */
+function getWeekStart() {
+  const now = new Date();
+  // UTC 기준 현재 요일 (0=일, 1=월, ... 2=화, 3=수 ...)
+  const day = now.getUTCDay();
+  const hour = now.getUTCHours();
+  // 가장 최근 화요일 21:00 UTC 계산
+  let daysBack = (day - 2 + 7) % 7; // 화요일(2)까지 며칠 전인지
+  if (daysBack === 0 && hour < 21) daysBack = 7; // 아직 이번 주 화 21:00 안 지났으면 저번 주
+  const weekStart = new Date(now);
+  weekStart.setUTCDate(now.getUTCDate() - daysBack);
+  weekStart.setUTCHours(21, 0, 0, 0);
+  return weekStart.toISOString();
+}
 
 /* ─────────────────────────────────────────────
    파티 슬롯 계산 유틸
@@ -155,13 +177,16 @@ export default function RaidDetailPage() {
   const [searchError, setSearchError] = useState("");
   // 자동 로드된 멤버 representative 목록 (배지 표시용)
   const [autoLoadedReps, setAutoLoadedReps] = useState(new Set());
+  // 주간 중복 참여 캐릭터 id Set
+  const [weeklyUsedCharIds, setWeeklyUsedCharIds] = useState(new Set());
   // 레이드 정보 수정 모달
   const [editModal, setEditModal] = useState(false);
   const [editForm, setEditForm] = useState({ difficulty: "", max_slots: 8 });
   const [editSaving, setEditSaving] = useState(false);
 
   /* ── 최근 멤버 localStorage 키 ─────────────── */
-  const recentMembersKey = raidId ? `raid_recent_members:${raidId}` : null;
+  // 전역 최근 멤버 키 (레이드 인스턴스가 달라도 공유)
+  const recentMembersKey = 'raid_recent_members_global';
 
   const saveRecentMember = (representative) => {
     if (!recentMembersKey) return;
@@ -243,6 +268,18 @@ export default function RaidDetailPage() {
         setSlots(slotsData);
         setMyCharacters(charsData);
         setMembers(membersData);
+
+        // 주간 중복 참여 슬롯 조회 (같은 raid_id 종류의 다른 인스턴스에 배치된 캐릭터)
+        try {
+          const weeklySlots = await API.getWeeklyUsedSlots(raidData.raid_id, getWeekStart());
+          // 현재 레이드 인스턴스(raidId) 제외한 슬롯의 character_id 집합
+          const usedIds = new Set(
+            weeklySlots
+              .filter((s) => s.raid_instance_id !== raidId)
+              .map((s) => s.character_id)
+          );
+          setWeeklyUsedCharIds(usedIds);
+        } catch {}
 
         /* ── 최근 멤버 자동 로드 ─────────────────── */
         const recentReps = loadRecentMembers();
@@ -432,14 +469,18 @@ export default function RaidDetailPage() {
     return char.item_level < required;
   };
 
-  // 드래그 불가 여부 (이미 배치됐거나 같은 유저의 캐릭터가 배치됨, 레벨 미달)
+  // 주간 중복 참여 여부 (같은 raid_id 종류의 다른 인스턴스에 이미 배치됨)
+  const isWeeklyUsed = (charId) => weeklyUsedCharIds.has(charId);
+
+  // 드래그 불가 여부 (이미 배치됐거나 같은 유저의 캐릭터가 배치됨, 레벨 미달, 주간 중복)
   const isDraggable = (charId) =>
-    !isCharPlaced(charId) && !isUserAlreadyPlaced(charId) && !isLevelInsufficient(charId);
+    !isCharPlaced(charId) && !isUserAlreadyPlaced(charId) && !isLevelInsufficient(charId) && !isWeeklyUsed(charId);
 
   /* ── 클릭으로 배치 / 제거 ──────────────────── */
   const onCharClick = async (charId) => {
     if (isUserAlreadyPlaced(charId)) return;
     if (isLevelInsufficient(charId)) return;
+    if (isWeeklyUsed(charId)) return;
 
     const existingSlot = slots.find((s) => s.character_id === charId);
     if (existingSlot) {
@@ -667,7 +708,11 @@ export default function RaidDetailPage() {
               {/* 내 원정대 */}
               <div style={styles.charColumn}>
                 <div style={styles.charColumnHeader}>
-                  <div style={styles.charGroupLabel}>내 원정대</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
+                    <div style={styles.charGroupLabel}>내 원정대</div>
+                    {/* 배지 자리 — 높이 통일을 위한 빈 공간 */}
+                    <span style={{ display: "block", height: 16 }} />
+                  </div>
                 </div>
                 {myCharacters.length === 0 ? (
                   <div style={styles.emptyChars}>캐릭터 없음</div>
@@ -676,9 +721,11 @@ export default function RaidDetailPage() {
                     const placed = isCharPlaced(char.id);
                     const userPlaced = isUserAlreadyPlaced(char.id);
                     const levelInsufficient = isLevelInsufficient(char.id);
+                    const weeklyUsed = isWeeklyUsed(char.id);
                     const draggable = isDraggable(char.id);
-                    const disabled = placed || userPlaced || levelInsufficient;
+                    const disabled = placed || userPlaced || levelInsufficient || weeklyUsed;
                     const titleMsg = placed ? "이미 배치됨"
+                      : weeklyUsed ? "이번 주 동일 레이드 다른 난이도에 배치됨"
                       : levelInsufficient ? `입장 레벨 부족 (${RAID_META[raid.raid_id]?.entryLevel?.[raid.difficulty] ?? "?"})`
                       : userPlaced ? "같은 원정대 캐릭터가 배치됨"
                       : "클릭 또는 드래그해서 배치";
@@ -688,7 +735,7 @@ export default function RaidDetailPage() {
                         draggable={draggable}
                         onDragStart={(e) => draggable && onCharDragStart(e, char.id)}
                         onClick={() => onCharClick(char.id)}
-                        style={styles.charCard(disabled, levelInsufficient)}
+                        style={styles.charCard(disabled, levelInsufficient || weeklyUsed)}
                         title={titleMsg}
                       >
                         <div style={styles.charCardLeft}>
@@ -699,10 +746,13 @@ export default function RaidDetailPage() {
                           {char.item_level?.toLocaleString() ?? "-"}
                         </div>
                         {placed && <div style={styles.placedBadge}>배치됨</div>}
-                        {levelInsufficient && !placed && (
+                        {weeklyUsed && !placed && (
+                          <div style={{ ...styles.placedBadge, color: "#ef4444" }}>주간 사용</div>
+                        )}
+                        {levelInsufficient && !placed && !weeklyUsed && (
                           <div style={{ ...styles.placedBadge, color: "#64748b" }}>레벨 부족</div>
                         )}
-                        {!placed && !levelInsufficient && userPlaced && (
+                        {!placed && !levelInsufficient && !weeklyUsed && userPlaced && (
                           <div style={{ ...styles.placedBadge, color: "#ef4444" }}>배치 불가</div>
                         )}
                       </div>
@@ -717,8 +767,11 @@ export default function RaidDetailPage() {
                   <div style={styles.charColumnHeader}>
                     <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
                       <div style={styles.charGroupLabel}>{member.representative}</div>
-                      {autoLoadedReps.has(member.representative) && (
-                        <span style={styles.autoLoadedBadge}>자동 로드</span>
+                      {/* 최근 이용한 원정대 배지 — 배지 없어도 높이 통일 */}
+                      {autoLoadedReps.has(member.representative) ? (
+                        <span style={styles.autoLoadedBadge}>최근 이용한 원정대</span>
+                      ) : (
+                        <span style={{ display: "block", height: 16 }} />
                       )}
                     </div>
                     <div
@@ -736,9 +789,11 @@ export default function RaidDetailPage() {
                       const placed = isCharPlaced(char.id);
                       const userPlaced = isUserAlreadyPlaced(char.id);
                       const levelInsufficient = isLevelInsufficient(char.id);
+                      const weeklyUsed = isWeeklyUsed(char.id);
                       const draggable = isDraggable(char.id);
-                      const disabled = placed || userPlaced || levelInsufficient;
+                      const disabled = placed || userPlaced || levelInsufficient || weeklyUsed;
                       const titleMsg = placed ? "이미 배치됨"
+                        : weeklyUsed ? "이번 주 동일 레이드 다른 난이도에 배치됨"
                         : levelInsufficient ? `입장 레벨 부족 (${RAID_META[raid.raid_id]?.entryLevel?.[raid.difficulty] ?? "?"})`
                         : userPlaced ? "같은 원정대 캐릭터가 배치됨"
                         : "클릭 또는 드래그해서 배치";
@@ -748,7 +803,7 @@ export default function RaidDetailPage() {
                           draggable={draggable}
                           onDragStart={(e) => draggable && onCharDragStart(e, char.id)}
                           onClick={() => onCharClick(char.id)}
-                          style={styles.charCard(disabled, levelInsufficient)}
+                          style={styles.charCard(disabled, levelInsufficient || weeklyUsed)}
                           title={titleMsg}
                         >
                           <div style={styles.charCardLeft}>
@@ -759,10 +814,13 @@ export default function RaidDetailPage() {
                             {char.item_level?.toLocaleString() ?? "-"}
                           </div>
                           {placed && <div style={styles.placedBadge}>배치됨</div>}
-                          {levelInsufficient && !placed && (
+                          {weeklyUsed && !placed && (
+                            <div style={{ ...styles.placedBadge, color: "#ef4444" }}>주간 사용</div>
+                          )}
+                          {levelInsufficient && !placed && !weeklyUsed && (
                             <div style={{ ...styles.placedBadge, color: "#64748b" }}>레벨 부족</div>
                           )}
-                          {!placed && !levelInsufficient && userPlaced && (
+                          {!placed && !levelInsufficient && !weeklyUsed && userPlaced && (
                             <div style={{ ...styles.placedBadge, color: "#ef4444" }}>배치 불가</div>
                           )}
                         </div>
@@ -1171,13 +1229,13 @@ const styles = {
   },
   charColumnHeader: {
     display: "flex",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
     marginBottom: 8,
     paddingBottom: 8,
     borderBottom: "1px solid rgba(248,250,252,0.06)",
     flexShrink: 0,
-    minHeight: 28,
+    minHeight: 44,   // 배지 유무와 관계없이 높이 통일
   },
   charCard: (placed, levelInsufficient = false) => ({
     display: "flex",

@@ -1,12 +1,16 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { getCharacters, syncAll } from '../api/characters'
 import { getMyRaids, getJoinedRaids, deleteRaid, getSlots } from '../api/raids'
 import { useUser } from '../hooks/useUser'
+import { supabase } from '../lib/supabase'
 
 /* ─────────────────────────────────────────────
    레이드 섹션 레이아웃 상수
+   ───────────────────────────────────────────── */
+/* ─────────────────────────────────────────────
+   ✏️  레이드 섹션 레이아웃 — 이 두 값만 바꾸면 됩니다
    ───────────────────────────────────────────── */
 const RAID_SCROLL_THRESHOLD = 6   // 이 개수 이상이면 스크롤 활성화
 const RAID_SECTION_MAX_HEIGHT = 672  // 스크롤 활성화 시 섹션 최대 높이(px)
@@ -261,6 +265,62 @@ export default function MainPage() {
     },
   })
 
+  /* ── Supabase Realtime 구독 ──────────────── */
+  // raid_members, raid_slots, raids 테이블 변경 시 즉시 갱신
+  // - 유저 A가 B를 레이드에 추가하면 B의 메인페이지에서 즉시 반영
+  useEffect(() => {
+    if (!fingerprint) return
+
+    // raid_members 변경 구독 → 내가 레이드에 초대됐을 때 joinedRaids 갱신
+    const membersChannel = supabase
+      .channel('mainpage_raid_members')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'raid_members',
+      }, () => {
+        queryClient.invalidateQueries({ queryKey: ['joinedRaids', fingerprint] })
+        queryClient.invalidateQueries({ queryKey: ['myRaids', fingerprint] })
+      })
+      .subscribe()
+
+    // raid_slots 변경 구독 → 다른 유저가 슬롯 배치/제거하면 슬롯 정보 갱신
+    const slotsChannel = supabase
+      .channel('mainpage_raid_slots')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'raid_slots',
+      }, (payload) => {
+        // 변경된 슬롯의 raid_id만 재조회
+        const changedRaidId = payload.new?.raid_id ?? payload.old?.raid_id
+        if (!changedRaidId) return
+        getSlots(changedRaidId).then(slots => {
+          setSlotsMap(prev => ({ ...prev, [changedRaidId]: slots }))
+        })
+      })
+      .subscribe()
+
+    // raids 변경 구독 → 레이드 생성/삭제 시 목록 갱신
+    const raidsChannel = supabase
+      .channel('mainpage_raids')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'raids',
+      }, () => {
+        queryClient.invalidateQueries({ queryKey: ['myRaids', fingerprint] })
+        queryClient.invalidateQueries({ queryKey: ['joinedRaids', fingerprint] })
+      })
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(membersChannel)
+      supabase.removeChannel(slotsChannel)
+      supabase.removeChannel(raidsChannel)
+    }
+  }, [fingerprint])
+
   /* ── 드래그 앤 드롭 핸들러 ────────────────── */
   const handleDragStart = (index) => {
     dragIndex.current = index
@@ -385,7 +445,7 @@ export default function MainPage() {
             {raidLoading ? (
               <div className="px-4 py-5 text-sm text-gray-500">불러오는 중...</div>
             ) : raids.length === 0 ? (
-              <div className="flex flex-col items-center justify-center text-center" style={{ height: `${RAID_SECTION_HEIGHT}px` }}>
+              <div className="flex flex-col items-center justify-center text-center" style={{ height: `${RAID_SECTION_MAX_HEIGHT}px` }}>
                 <p className="text-sm text-gray-500">참여 중인 레이드가 없어요.</p>
                 <button
                   onClick={() => navigate('/raids/new')}
@@ -399,7 +459,7 @@ export default function MainPage() {
               <div
                 className="raid-scroll overflow-y-auto"
                 style={{
-                  maxHeight: raids.length >= RAID_SCROLL_THRESHOLD ? `${RAID_SECTION_HEIGHT}px` : 'none',
+                  maxHeight: raids.length >= RAID_SCROLL_THRESHOLD ? `${RAID_SECTION_MAX_HEIGHT}px` : 'none',
                 }}
               >
                 {raids.map((raid, index) => {
