@@ -106,29 +106,29 @@ function buildPartyStructure(maxSlots) {
    레이드별 난이도/최대인원 메타 (수정 모달용)
    ───────────────────────────────────────────── */
 const RAID_META = {
-  argos:              { difficulties: ["노말"],                        maxSlots: 8  },
-  valtan:             { difficulties: ["노말","하드"],                  maxSlots: 8  },
-  biackiss:           { difficulties: ["노말","하드"],                  maxSlots: 8  },
-  koukusaton:         { difficulties: ["노말"],                        maxSlots: 4  },
-  abrelshud_legion:   { difficulties: ["노말","하드"],                  maxSlots: 8  },
-  illiakan:           { difficulties: ["노말","하드"],                  maxSlots: 8  },
-  kamen:              { difficulties: ["노말","하드"],                  maxSlots: 8  },
-  echidna:            { difficulties: ["노말","하드"],                  maxSlots: 8  },
-  egir:               { difficulties: ["노말","하드"],                  maxSlots: 8  },
-  abrelshud_kazeroth: { difficulties: ["노말","하드"],                  maxSlots: 8  },
-  mordoom:            { difficulties: ["노말","하드"],                  maxSlots: 8  },
-  armorche:           { difficulties: ["노말","하드"],                  maxSlots: 8  },
-  kazeroth_boss:      { difficulties: ["노말","하드"],                  maxSlots: 8  },
-  behemoth:           { difficulties: ["노말"],                        maxSlots: 16 },
-  serca:              { difficulties: ["노말","하드","나이트메어"],      maxSlots: 4  },
-  elvalria:           { difficulties: ["노말"],                        maxSlots: 4  },
-  dream_palace:       { difficulties: ["노말"],                        maxSlots: 4  },
-  ark_arrogance:      { difficulties: ["노말"],                        maxSlots: 4  },
-  gate_paradise:      { difficulties: ["노말"],                        maxSlots: 4  },
-  oreha:              { difficulties: ["노말","하드"],                  maxSlots: 4  },
-  kayangel:           { difficulties: ["노말","하드"],                  maxSlots: 4  },
-  tower_chaos:        { difficulties: ["노말","하드"],                  maxSlots: 4  },
-  cathedral:          { difficulties: ["1단계","2단계","3단계"],         maxSlots: 4  },
+  argos:              { difficulties: ["노말"],                        maxSlots: 8,  entryLevel: { 노말: 1370 } },
+  valtan:             { difficulties: ["노말","하드"],                  maxSlots: 8,  entryLevel: { 노말: 1415, 하드: 1445 } },
+  biackiss:           { difficulties: ["노말","하드"],                  maxSlots: 8,  entryLevel: { 노말: 1430, 하드: 1460 } },
+  koukusaton:         { difficulties: ["노말"],                        maxSlots: 4,  entryLevel: { 노말: 1475 } },
+  abrelshud_legion:   { difficulties: ["노말","하드"],                  maxSlots: 8,  entryLevel: { 노말: 1490, 하드: 1540 } },
+  illiakan:           { difficulties: ["노말","하드"],                  maxSlots: 8,  entryLevel: { 노말: 1580, 하드: 1600 } },
+  kamen:              { difficulties: ["노말","하드"],                  maxSlots: 8,  entryLevel: { 노말: 1610, 하드: 1630 } },
+  echidna:            { difficulties: ["노말","하드"],                  maxSlots: 8,  entryLevel: { 노말: 1620, 하드: 1640 } },
+  egir:               { difficulties: ["노말","하드"],                  maxSlots: 8,  entryLevel: { 노말: 1660, 하드: 1680 } },
+  abrelshud_kazeroth: { difficulties: ["노말","하드"],                  maxSlots: 8,  entryLevel: { 노말: 1670, 하드: 1690 } },
+  mordoom:            { difficulties: ["노말","하드"],                  maxSlots: 8,  entryLevel: { 노말: 1680, 하드: 1700 } },
+  armorche:           { difficulties: ["노말","하드"],                  maxSlots: 8,  entryLevel: { 노말: 1700, 하드: 1720 } },
+  kazeroth_boss:      { difficulties: ["노말","하드"],                  maxSlots: 8,  entryLevel: { 노말: 1710, 하드: 1730 } },
+  behemoth:           { difficulties: ["노말"],                        maxSlots: 16, entryLevel: { 노말: 1640 } },
+  serca:              { difficulties: ["노말","하드","나이트메어"],      maxSlots: 4,  entryLevel: { 노말: 1710, 하드: 1730, 나이트메어: 1740 } },
+  elvalria:           { difficulties: ["노말"],                        maxSlots: 4,  entryLevel: { 노말: 500 } },
+  dream_palace:       { difficulties: ["노말"],                        maxSlots: 4,  entryLevel: { 노말: 635 } },
+  ark_arrogance:      { difficulties: ["노말"],                        maxSlots: 4,  entryLevel: { 노말: 805 } },
+  gate_paradise:      { difficulties: ["노말"],                        maxSlots: 4,  entryLevel: { 노말: 960 } },
+  oreha:              { difficulties: ["노말","하드"],                  maxSlots: 4,  entryLevel: { 노말: 1340, 하드: 1370 } },
+  kayangel:           { difficulties: ["노말","하드"],                  maxSlots: 4,  entryLevel: { 노말: 1540, 하드: 1580 } },
+  tower_chaos:        { difficulties: ["노말","하드"],                  maxSlots: 4,  entryLevel: { 노말: 1600, 하드: 1620 } },
+  cathedral:          { difficulties: ["1단계","2단계","3단계"],         maxSlots: 4,  entryLevel: { "1단계": 1700, "2단계": 1720, "3단계": 1750 } },
 };
 
 /* ─────────────────────────────────────────────
@@ -420,14 +420,26 @@ export default function RaidDetailPage() {
     return false;
   };
 
-  // 드래그 불가 여부 (이미 배치됐거나 같은 유저의 캐릭터가 배치됨)
-  const isDraggable = (charId) => !isCharPlaced(charId) && !isUserAlreadyPlaced(charId);
+  // 입장 레벨 미달 여부
+  const isLevelInsufficient = (charId) => {
+    if (!raid) return false;
+    const meta = RAID_META[raid.raid_id];
+    if (!meta?.entryLevel) return false;
+    const required = meta.entryLevel[raid.difficulty];
+    if (!required) return false;
+    const char = allCharacters.find((c) => c.id === charId);
+    if (!char?.item_level) return false;
+    return char.item_level < required;
+  };
+
+  // 드래그 불가 여부 (이미 배치됐거나 같은 유저의 캐릭터가 배치됨, 레벨 미달)
+  const isDraggable = (charId) =>
+    !isCharPlaced(charId) && !isUserAlreadyPlaced(charId) && !isLevelInsufficient(charId);
 
   /* ── 클릭으로 배치 / 제거 ──────────────────── */
-  // 클릭 시: 이미 배치됐으면 제거, 아니면 1파티→2파티 순으로 첫 번째 빈 슬롯에 자동 배치
   const onCharClick = async (charId) => {
-    // 같은 원정대의 다른 캐릭터가 배치된 경우 무시
     if (isUserAlreadyPlaced(charId)) return;
+    if (isLevelInsufficient(charId)) return;
 
     const existingSlot = slots.find((s) => s.character_id === charId);
     if (existingSlot) {
@@ -663,16 +675,21 @@ export default function RaidDetailPage() {
                   myCharacters.map((char) => {
                     const placed = isCharPlaced(char.id);
                     const userPlaced = isUserAlreadyPlaced(char.id);
+                    const levelInsufficient = isLevelInsufficient(char.id);
                     const draggable = isDraggable(char.id);
-                    const disabled = placed || userPlaced;
+                    const disabled = placed || userPlaced || levelInsufficient;
+                    const titleMsg = placed ? "이미 배치됨"
+                      : levelInsufficient ? `입장 레벨 부족 (${RAID_META[raid.raid_id]?.entryLevel?.[raid.difficulty] ?? "?"})`
+                      : userPlaced ? "같은 원정대 캐릭터가 배치됨"
+                      : "클릭 또는 드래그해서 배치";
                     return (
                       <div
                         key={char.id}
                         draggable={draggable}
                         onDragStart={(e) => draggable && onCharDragStart(e, char.id)}
                         onClick={() => onCharClick(char.id)}
-                        style={styles.charCard(disabled)}
-                        title={placed ? "이미 배치됨" : userPlaced ? "같은 원정대 캐릭터가 배치됨" : "클릭 또는 드래그해서 배치"}
+                        style={styles.charCard(disabled, levelInsufficient)}
+                        title={titleMsg}
                       >
                         <div style={styles.charCardLeft}>
                           <div style={styles.charName}>{char.name}</div>
@@ -682,7 +699,12 @@ export default function RaidDetailPage() {
                           {char.item_level?.toLocaleString() ?? "-"}
                         </div>
                         {placed && <div style={styles.placedBadge}>배치됨</div>}
-                        {!placed && userPlaced && <div style={{ ...styles.placedBadge, color: "#ef4444" }}>배치 불가</div>}
+                        {levelInsufficient && !placed && (
+                          <div style={{ ...styles.placedBadge, color: "#64748b" }}>레벨 부족</div>
+                        )}
+                        {!placed && !levelInsufficient && userPlaced && (
+                          <div style={{ ...styles.placedBadge, color: "#ef4444" }}>배치 불가</div>
+                        )}
                       </div>
                     );
                   })
@@ -713,16 +735,21 @@ export default function RaidDetailPage() {
                     member.characters.map((char) => {
                       const placed = isCharPlaced(char.id);
                       const userPlaced = isUserAlreadyPlaced(char.id);
+                      const levelInsufficient = isLevelInsufficient(char.id);
                       const draggable = isDraggable(char.id);
-                      const disabled = placed || userPlaced;
+                      const disabled = placed || userPlaced || levelInsufficient;
+                      const titleMsg = placed ? "이미 배치됨"
+                        : levelInsufficient ? `입장 레벨 부족 (${RAID_META[raid.raid_id]?.entryLevel?.[raid.difficulty] ?? "?"})`
+                        : userPlaced ? "같은 원정대 캐릭터가 배치됨"
+                        : "클릭 또는 드래그해서 배치";
                       return (
                         <div
                           key={char.id}
                           draggable={draggable}
                           onDragStart={(e) => draggable && onCharDragStart(e, char.id)}
                           onClick={() => onCharClick(char.id)}
-                          style={styles.charCard(disabled)}
-                          title={placed ? "이미 배치됨" : userPlaced ? "같은 원정대 캐릭터가 배치됨" : "클릭 또는 드래그해서 배치"}
+                          style={styles.charCard(disabled, levelInsufficient)}
+                          title={titleMsg}
                         >
                           <div style={styles.charCardLeft}>
                             <div style={styles.charName}>{char.name}</div>
@@ -732,7 +759,12 @@ export default function RaidDetailPage() {
                             {char.item_level?.toLocaleString() ?? "-"}
                           </div>
                           {placed && <div style={styles.placedBadge}>배치됨</div>}
-                          {!placed && userPlaced && <div style={{ ...styles.placedBadge, color: "#ef4444" }}>배치 불가</div>}
+                          {levelInsufficient && !placed && (
+                            <div style={{ ...styles.placedBadge, color: "#64748b" }}>레벨 부족</div>
+                          )}
+                          {!placed && !levelInsufficient && userPlaced && (
+                            <div style={{ ...styles.placedBadge, color: "#ef4444" }}>배치 불가</div>
+                          )}
                         </div>
                       );
                     })
@@ -1147,23 +1179,29 @@ const styles = {
     flexShrink: 0,
     minHeight: 28,
   },
-  charCard: (placed) => ({
+  charCard: (placed, levelInsufficient = false) => ({
     display: "flex",
     alignItems: "center",
     gap: 8,
     padding: "10px 12px",
     borderRadius: 10,
-    border: placed
-      ? "1px solid rgba(100,116,139,0.1)"
-      : "1px solid rgba(248,250,252,0.08)",
-    background: placed
-      ? "rgba(15,23,42,0.3)"
-      : "rgba(30,41,59,0.5)",
-    cursor: placed ? "default" : "grab",
-    opacity: placed ? 0.45 : 1,
+    border: levelInsufficient
+      ? "1px solid rgba(100,116,139,0.06)"
+      : placed
+        ? "1px solid rgba(100,116,139,0.1)"
+        : "1px solid rgba(248,250,252,0.08)",
+    background: levelInsufficient
+      ? "rgba(10,12,20,0.6)"
+      : placed
+        ? "rgba(15,23,42,0.3)"
+        : "rgba(30,41,59,0.5)",
+    cursor: (placed || levelInsufficient) ? "default" : "grab",
+    opacity: levelInsufficient ? 0.35 : placed ? 0.45 : 1,
     transition: "all 0.2s ease",
     userSelect: "none",
     position: "relative",
+    // 레벨 부족 캐릭터는 흑백 필터로 시각적 구분 강화
+    filter: levelInsufficient ? "grayscale(0.6)" : "none",
   }),
   charCardLeft: { flex: 1, minWidth: 0 },
   charName: {

@@ -6,6 +6,13 @@ import { getMyRaids, getJoinedRaids, deleteRaid, getSlots } from '../api/raids'
 import { useUser } from '../hooks/useUser'
 
 /* ─────────────────────────────────────────────
+   레이드 섹션 레이아웃 상수
+   ───────────────────────────────────────────── */
+const RAID_ROW_HEIGHT = 56        // 레이드 1행 높이(px) — py-3.5(14px*2) + 내용
+const RAID_SCROLL_THRESHOLD = 5   // 이 개수부터 스크롤 활성화
+const RAID_SECTION_HEIGHT = RAID_ROW_HEIGHT * RAID_SCROLL_THRESHOLD  // 280px
+
+/* ─────────────────────────────────────────────
    난이도 배지 스타일
    ───────────────────────────────────────────── */
 const DIFF_STYLE = {
@@ -242,7 +249,7 @@ export default function MainPage() {
             {raidLoading ? (
               <div className="px-4 py-5 text-sm text-gray-500">불러오는 중...</div>
             ) : raids.length === 0 ? (
-              <div className="py-10 flex flex-col items-center justify-center text-center">
+              <div className="flex flex-col items-center justify-center text-center" style={{ height: `${RAID_SECTION_HEIGHT}px` }}>
                 <p className="text-sm text-gray-500">참여 중인 레이드가 없어요.</p>
                 <button
                   onClick={() => navigate('/raids/new')}
@@ -255,7 +262,10 @@ export default function MainPage() {
               // ── [수정 5] 6개 초과 시 스크롤 ──────────────
               <div
                 className="raid-scroll overflow-y-auto"
-                style={{ maxHeight: raids.length > 6 ? '336px' : 'none' }}
+                style={{
+                  minHeight: `${RAID_SECTION_HEIGHT}px`,
+                  maxHeight: raids.length >= RAID_SCROLL_THRESHOLD ? `${RAID_SECTION_HEIGHT}px` : 'none',
+                }}
               >
                 {raids.map((raid, index) => {
                   const isDone = completedRaids.has(raid.id)
@@ -311,10 +321,28 @@ export default function MainPage() {
                         {raid.difficulty}
                       </span>
 
-                      {/* 레이드 이름 */}
-                      <span className={`flex-1 text-sm font-medium truncate ${isDone ? 'text-gray-500 line-through decoration-gray-600' : 'text-white'}`}>
-                        {raid.raid_name}
-                      </span>
+                      {/* 레이드 이름 + 배치 중 배지 */}
+                      <div className="flex-1 min-w-0 flex items-center gap-2">
+                        <span className={`text-sm font-medium truncate ${isDone ? 'text-gray-500 line-through decoration-gray-600' : 'text-white'}`}>
+                          {raid.raid_name}
+                        </span>
+                        {(() => {
+                          const slots = slotsMap[raid.id] || []
+                          const placedCharIds = new Set(slots.map(s => s.character_id))
+                          const placedChar = characters.find(c => placedCharIds.has(c.id))
+                          if (!placedChar) return null
+                          return (
+                            <span className={`flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded flex-shrink-0 whitespace-nowrap ${
+                              isDone ? 'text-gray-600 bg-gray-800/50' : 'text-amber-400 bg-amber-400/10'
+                            }`}>
+                              <svg width="6" height="6" viewBox="0 0 6 6" fill="currentColor" className="flex-shrink-0">
+                                <circle cx="3" cy="3" r="3"/>
+                              </svg>
+                              {placedChar.name} 배치 중
+                            </span>
+                          )
+                        })()}
+                      </div>
 
                       {/* 슬롯 파이프 — 4개 단위로 파티 구분 */}
                       <div className="flex items-center gap-1 flex-shrink-0">
