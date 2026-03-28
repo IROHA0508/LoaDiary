@@ -12,75 +12,69 @@ BASE_URL = "https://developer-lostark.game.onstove.com"
 SUPPORT_ENGRAVINGS = {"축복의 오라", "빛의 기사", "절실한 구원", "만개"}
 
 
-# 캐릭터 목록 호출 (원정대 전체)
-async def get_characters(character_name: str) -> list:
-  headers = {
+def _headers() -> dict:
+  return {
     "Authorization": f"bearer {LOSTARK_API_KEY}",
     "Accept": "application/json",
   }
-  url = f"{BASE_URL}/characters/{character_name}/siblings"
 
+
+def _parse_level(level_str: str | None) -> float | None:
+  if not level_str:
+    return None
+  try:
+    return float(level_str.replace(",", ""))
+  except ValueError:
+    return None
+
+
+# ── 원정대 전체 캐릭터 목록 조회 ──────────────────────
+async def get_characters(character_name: str) -> list:
+  url = f"{BASE_URL}/characters/{character_name}/siblings"
   try:
     async with httpx.AsyncClient() as client:
-      response = await client.get(url, headers=headers)
+      response = await client.get(url, headers=_headers())
     if response.status_code == 200:
       data = response.json()
       return data if isinstance(data, list) else []
   except Exception:
     pass
-
   return []
 
 
-# 캐릭터 프로필 조회 — 전투력 수집
+# ── 캐릭터 프로필 조회 — 전투력 수집 ──────────────────
 async def get_character_profile(character_name: str, client: httpx.AsyncClient) -> dict:
-  headers = {
-    "Authorization": f"bearer {LOSTARK_API_KEY}",
-    "Accept": "application/json",
-  }
   url = f"{BASE_URL}/armories/characters/{character_name}/profiles"
-
   try:
-    response = await client.get(url, headers=headers)
+    response = await client.get(url, headers=_headers())
     if response.status_code == 200:
       data = response.json()
       return data if isinstance(data, dict) else {}
   except Exception:
     pass
-
   return {}
 
 
-# 캐릭터 아크패시브 조회 — 서포터 빌드 여부 판별
+# ── 아크패시브 조회 — 서포터 빌드 여부 판별 ────────────
 # /armories/characters/{name}/arkpassive 응답:
-#   "Engravings": [{Slot, Name, Icon, Tooltip}, ...]  → 장착된 각인 아이템
-#   "Effects":    [{Icon, Name, Description}, ...]    → 실제 활성화된 각인 효과
-# Effects[].Name 형식 예: "절실한 구원 Lv.3"
-# → Name이 서포터 각인 이름으로 시작하면 서포터로 판정
+# Title 필드가 SUPPORT_ENGRAVINGS에 포함되면 서포터로 판정
 async def get_character_engravings(character_name: str, client: httpx.AsyncClient) -> bool:
-  headers = {
-    "Authorization": f"bearer {LOSTARK_API_KEY}",
-    "Accept": "application/json",
-  }
   url = f"{BASE_URL}/armories/characters/{character_name}/arkpassive"
-
   try:
-    response = await client.get(url, headers=headers)
+    response = await client.get(url, headers=_headers())
     if response.status_code == 200:
       data = response.json()
       if not data:
         return False
-
       title = data.get("Title", "")
       if title in SUPPORT_ENGRAVINGS:
         return True
   except Exception:
     pass
-
   return False
 
 
-# DB 저장용 데이터로 변환
+# ── DB 저장용 데이터로 변환 ────────────────────────────
 async def parse_characters(raw: list, user_id: str) -> list:
   result = []
 
@@ -98,7 +92,6 @@ async def parse_characters(raw: list, user_id: str) -> list:
         if profile:
           combat_power = _parse_level(profile.get("CombatPower"))
 
-        # 각인 조회 → 서포터 빌드 여부 판별
         is_support = await get_character_engravings(name, client)
 
       result.append({
@@ -113,10 +106,19 @@ async def parse_characters(raw: list, user_id: str) -> list:
 
   return result
 
-def _parse_level(level_str: str | None) -> float | None:
-  if not level_str:
-    return None
+
+# ── 캐릭터 상세 정보 일괄 조회 (캐릭터 상세 페이지용) ──
+# profiles + equipment + engravings + gems + cards + arkpassive 를
+# 단일 요청으로 가져옴. 응답 구조는 Lostark armory API 스펙을 그대로 반환.
+async def get_armory(character_name: str) -> dict:
+  filters = "profiles+equipment+engravings+gems+cards+arkpassive"
+  url = f"{BASE_URL}/armories/characters/{character_name}?filters={filters}"
   try:
-    return float(level_str.replace(",", ""))
-  except ValueError:
-    return None
+    async with httpx.AsyncClient(timeout=15.0) as client:
+      response = await client.get(url, headers=_headers())
+      if response.status_code == 200:
+        data = response.json()
+        return data if isinstance(data, dict) else {}
+  except Exception:
+    pass
+  return {}

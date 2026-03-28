@@ -21,6 +21,7 @@ import RaidDetailPage from './pages/raids/RaidDetailPage'
 import RankingPage from './pages/features/RankingPage'
 import MarketPage from './pages/features/MarketPage'
 import MerchantPage from './pages/features/MerchantPage'
+import CharacterDetailPage from './pages/CharacterDetailPage'
 
 // QueryClient 인스턴스 생성
 const queryClient = new QueryClient()
@@ -78,6 +79,9 @@ function AppRoutes(){
         <Route path="/ranking" element={<RankingPage />} />
         <Route path="/market" element={<MarketPage />} />
         <Route path="/merchants" element={<MerchantPage />} />
+
+        {/* 캐릭터 상세 페이지  */}
+        <Route path="/characters/:name" element={<CharacterDetailPage />} />
       </Route>
 
       {/* path="*" : 위에서 매칭되지 않은 모든 URL (ex. /asdfgh) */}

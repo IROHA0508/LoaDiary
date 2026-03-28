@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException
 from typing import List
 from app.schemas import CharacterResponse
 from app.db.supabase_client import supabase
-from app.lostark import get_characters, parse_characters
+from app.lostark import get_characters, parse_characters, get_armory
 from datetime import datetime, timezone
 
 # 라우터
@@ -74,3 +74,12 @@ async def sync_characters(fingerprint: str, representative: str):
     rows.append(row)
 
   return rows
+
+# 캐릭터 상세 조회 (Lostark armory API 직접 호출)
+# 장비 / 스탯 / 각인 / 보석 / 카드 / 아크패시브 포함
+@router.get("/{character_name}/armory")
+async def get_character_armory(character_name: str):
+  data = await get_armory(character_name)
+  if not data:
+    raise HTTPException(status_code=404, detail="캐릭터 정보를 불러올 수 없습니다.")
+  return data
