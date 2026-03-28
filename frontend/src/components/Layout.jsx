@@ -55,7 +55,7 @@ export default function Layout() {
               className="bg-transparent px-3 py-1.5 text-sm text-white placeholder-gray-500 outline-none flex-1 min-w-0"
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && e.target.value.trim()) {
-                  navigate(`/search?q=${encodeURIComponent(e.target.value.trim())}`)
+                  navigate(`/characters/${encodeURIComponent(e.target.value.trim())}`)
                 }
               }}
             />
@@ -63,7 +63,7 @@ export default function Layout() {
               onClick={(e) => {
                 const input = e.currentTarget.previousSibling
                 if (input.value.trim()) {
-                  navigate(`/search?q=${encodeURIComponent(input.value.trim())}`)
+                  navigate(`/characters/${encodeURIComponent(input.value.trim())}`)
                 }
               }}
               className="px-2.5 py-1.5 text-gray-400 hover:text-white hover:bg-gray-700 transition-colors flex-shrink-0"

@@ -65,6 +65,17 @@ export default function MainPage() {
   const queryClient = useQueryClient()
 
   const [raidToDelete, setRaidToDelete] = useState(null)
+  // 캐릭터 검색 (헤더 검색창 연결용)
+  const [charSearch, setCharSearch] = useState('')
+
+  const handleCharSearch = (e) => {
+    e.preventDefault()
+    const name = charSearch.trim()
+    if (name) {
+      setCharSearch('')
+      navigate(`/characters/${name}`)
+    }
+  }
 
   // 드래그 관련 상태
   const [raidOrder, setRaidOrder] = useState([])
@@ -446,7 +457,7 @@ export default function MainPage() {
         </main>
 
         {/* ── 사이드바: 내 원정대 목록 ───────── */}
-        <aside className="w-[300px] flex-shrink-0">
+        <aside className="w-[300px] flex-shrink-0 flex flex-col gap-4">
           <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
               <span className="text-sm font-medium text-gray-300">내 원정대</span>
