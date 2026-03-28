@@ -516,7 +516,7 @@ export default function CharacterDetailPage() {
   const ark      = armory?.ArkPassive || {}
 
   // 서포터 판정: DB(is_support) 우선, 없으면 아크패시브 Title로 추론
-  const SUPPORT_TITLES = ['축복의 오라', '빛의 기사', '절실한 구원', '만개']
+  const SUPPORT_TITLES = ['축복의 오라', '해방자', '절실한 구원', '만개']
   const isSupport = dbChar
     ? !!dbChar.is_support
     : SUPPORT_TITLES.includes(ark.Title || '')

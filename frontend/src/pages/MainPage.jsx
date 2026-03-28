@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { getCharacters } from '../api/characters'
+import { getCharacters, syncAll } from '../api/characters'
 import { getMyRaids, getJoinedRaids, deleteRaid, getSlots } from '../api/raids'
 import { useUser } from '../hooks/useUser'
 
@@ -157,6 +157,8 @@ export default function MainPage() {
   const queryClient = useQueryClient()
 
   const [raidToDelete, setRaidToDelete] = useState(null)
+  const [syncing, setSyncing] = useState(false)        // 전체 동기화 중 여부
+  const [syncResult, setSyncResult] = useState(null)   // { synced, failed } | null
   // 캐릭터 검색 (헤더 검색창 연결용)
   const [charSearch, setCharSearch] = useState('')
 
@@ -287,6 +289,38 @@ export default function MainPage() {
   const handleDragEnd = () => {
     dragIndex.current = null
     dragOverIndex.current = null
+  }
+
+  /* ── 전체 동기화 ──────────────────────────── */
+  const handleSyncAll = async () => {
+    if (syncing || !fingerprint) return
+    setSyncing(true)
+    setSyncResult(null)
+    try {
+      const result = await syncAll(fingerprint)
+      setSyncResult(result)
+      // 캐릭터 목록 갱신
+      queryClient.invalidateQueries({ queryKey: ['characters', fingerprint] })
+      // 슬롯 캐시 재조회 (is_support 변경 반영) — 기존 슬롯 데이터 유지하면서 갱신
+      const currentRaidIds = Object.keys(slotsMap)
+      if (currentRaidIds.length > 0) {
+        Promise.all(currentRaidIds.map(id => getSlots(id).then(slots => ({ id, slots }))))
+          .then(results => {
+            setSlotsMap(prev => {
+              const next = { ...prev }
+              results.forEach(({ id, slots }) => { next[id] = slots })
+              return next
+            })
+          })
+      }
+      // 3초 후 결과 메시지 숨김
+      setTimeout(() => setSyncResult(null), 3000)
+    } catch {
+      setSyncResult({ synced: [], failed: ['오류 발생'] })
+      setTimeout(() => setSyncResult(null), 3000)
+    } finally {
+      setSyncing(false)
+    }
   }
 
   /* ── 내가 만든 레이드 여부 ────────────────── */
@@ -463,6 +497,28 @@ export default function MainPage() {
                           </span>
                         </div>
 
+                        {/* 슬롯 도트 (인원 현황) */}
+                        <div className="flex items-center gap-0.5 flex-shrink-0">
+                          {Array.from({ length: raid.max_slots }).map((_, i) => {
+                            const isFilled = raidSlots.some(s => s.slot_order === i)
+                            const isPartyBreak = i > 0 && i % 4 === 0
+                            return (
+                              <span key={i} className="flex items-center gap-0.5">
+                                {isPartyBreak && (
+                                  <span className="block w-px h-2.5 bg-gray-700 mx-0.5 flex-shrink-0" />
+                                )}
+                                <span
+                                  className={`block w-1.5 h-1.5 rounded-full flex-shrink-0 transition-colors ${
+                                    isDone
+                                      ? 'bg-gray-700'
+                                      : isFilled ? 'bg-blue-400' : 'bg-gray-700'
+                                  }`}
+                                />
+                              </span>
+                            )
+                          })}
+                        </div>
+
                         {/* 내가 만든 / 참여 중 태그 */}
                         {isMyRaid(raid.id) ? (
                           <span className={`text-xs px-2 py-0.5 rounded flex-shrink-0 ${
@@ -476,7 +532,7 @@ export default function MainPage() {
                           </span>
                         )}
 
-                        {/* 삭제 / 나가기 버튼 */}
+                                          {/* 삭제 / 나가기 버튼 */}
                         <button
                           onClick={(e) => {
                             e.stopPropagation()
@@ -615,10 +671,45 @@ export default function MainPage() {
           <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
               <span className="text-sm font-medium text-gray-300">내 원정대</span>
-              {!charLoading && (
-                <span className="text-xs text-gray-500">{characters.length}명</span>
-              )}
+              <div className="flex items-center gap-2">
+                {!charLoading && (
+                  <span className="text-xs text-gray-500">{characters.length}명</span>
+                )}
+                {/* 전체 동기화 버튼 */}
+                <button
+                  onClick={handleSyncAll}
+                  disabled={syncing}
+                  title="내 캐릭터 + 레이드 멤버 전체 동기화"
+                  className="flex items-center gap-1 text-xs px-2 py-1 rounded border transition-colors disabled:opacity-40 disabled:cursor-not-allowed border-gray-700 text-gray-400 hover:text-white hover:border-gray-500 hover:bg-gray-800"
+                >
+                  {syncing ? (
+                    <>
+                      <svg className="animate-spin" width="11" height="11" viewBox="0 0 12 12" fill="none">
+                        <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.5" strokeDasharray="7 7"/>
+                      </svg>
+                      <span>동기화 중...</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
+                        <path d="M10 6A4 4 0 1 1 6 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                        <path d="M6 0l2 2-2 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                      <span>동기화</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
+            {/* 동기화 결과 메시지 */}
+            {syncResult && (
+              <div className={`px-4 py-2 text-xs border-b border-gray-800 ${
+                syncResult.failed?.length > 0 ? 'text-yellow-400 bg-yellow-400/5' : 'text-emerald-400 bg-emerald-400/5'
+              }`}>
+                ✓ {syncResult.synced?.length ?? 0}명 완료
+                {syncResult.failed?.length > 0 && ` · ${syncResult.failed.length}명 실패`}
+              </div>
+            )}
 
             {charLoading ? (
               <div className="px-4 py-5 text-sm text-gray-500">불러오는 중...</div>

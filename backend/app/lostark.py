@@ -11,13 +11,11 @@ BASE_URL = "https://developer-lostark.game.onstove.com"
 # 해당 각인이 Effects에 있으면 서포터 빌드로 판정
 SUPPORT_ARKPASSIVE = {"축복의 오라", "해방자", "절실한 구원", "만개"}
 
-
 def _headers() -> dict:
   return {
     "Authorization": f"bearer {LOSTARK_API_KEY}",
     "Accept": "application/json",
   }
-
 
 def _parse_level(level_str: str | None) -> float | None:
   if not level_str:
@@ -26,7 +24,6 @@ def _parse_level(level_str: str | None) -> float | None:
     return float(level_str.replace(",", ""))
   except ValueError:
     return None
-
 
 # ── 원정대 전체 캐릭터 목록 조회 ──────────────────────
 async def get_characters(character_name: str) -> list:
@@ -41,7 +38,6 @@ async def get_characters(character_name: str) -> list:
     pass
   return []
 
-
 # ── 캐릭터 프로필 조회 — 전투력 수집 ──────────────────
 async def get_character_profile(character_name: str, client: httpx.AsyncClient) -> dict:
   url = f"{BASE_URL}/armories/characters/{character_name}/profiles"
@@ -53,7 +49,6 @@ async def get_character_profile(character_name: str, client: httpx.AsyncClient) 
   except Exception:
     pass
   return {}
-
 
 # ── 아크패시브 조회 — 서포터 빌드 여부 판별 ────────────
 # /armories/characters/{name}/arkpassive 응답:
@@ -72,7 +67,6 @@ async def get_character_engravings(character_name: str, client: httpx.AsyncClien
   except Exception:
     pass
   return False
-
 
 # ── DB 저장용 데이터로 변환 ────────────────────────────
 async def parse_characters(raw: list, user_id: str) -> list:
@@ -105,7 +99,6 @@ async def parse_characters(raw: list, user_id: str) -> list:
       })
 
   return result
-
 
 # ── 캐릭터 상세 정보 일괄 조회 (캐릭터 상세 페이지용) ──
 # profiles + equipment + engravings + gems + cards + arkpassive 를
