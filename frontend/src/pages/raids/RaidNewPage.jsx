@@ -52,47 +52,47 @@ const RAIDS = [
   // ── 카제로스 레이드 ─────────────────────────
   {
     id: "kazeroth_boss", category: "kazeroth",
-    name: "카제로스", gates: 2, image: "🌀",
+    name: "종막 : 카제로스", gates: 2, image: "🌀",
     difficulties: ["노말", "하드"], maxSlots: 8,
     entryLevel: { 노말: 1710, 하드: 1730 },
   },
   {
     id: "armorche", category: "kazeroth",
-    name: "아르모체", gates: 2, image: "⚡",
+    name: "4막 : 아르모체", gates: 2, image: "⚡",
     difficulties: ["노말", "하드"], maxSlots: 8,
     entryLevel: { 노말: 1700, 하드: 1720 },
   },
   {
     id: "mordoom", category: "kazeroth",
-    name: "모르둠", gates: 3, image: "🕳️",
+    name: "3막 : 모르둠", gates: 3, image: "🕳️",
     difficulties: ["노말", "하드"], maxSlots: 8,
     entryLevel: { 노말: 1680, 하드: 1700 },
   },
   {
     id: "abrelshud_kazeroth", category: "kazeroth",
-    name: "아브렐슈드", tag: "카제로스", gates: 2, image: "👁️‍🗨️",
+    name: "2막 : 아브렐슈드", gates: 2, image: "👁️‍🗨️",
     difficulties: ["노말", "하드"], maxSlots: 8,
     entryLevel: { 노말: 1670, 하드: 1690 },
   },
   {
     id: "egir", category: "kazeroth",
-    name: "에기르", gates: 2, image: "🌊",
+    name: "1막 : 에기르", gates: 2, image: "🌊",
     difficulties: ["노말", "하드"], maxSlots: 8,
     entryLevel: { 노말: 1660, 하드: 1680 },
   },
-
+  {
+    id: "echidna", category: "kazeroth",
+    name: "서막 : 에키드나", gates: 2, image: "🐲",
+    difficulties: ["노말", "하드"], maxSlots: 8,
+    entryLevel: { 노말: 1620, 하드: 1640 },
+  },
+  
   // ── 에픽 레이드 ─────────────────────────────
   {
     id: "behemoth", category: "epic",
     name: "베히모스", gates: 2, image: "🦣",
     difficulties: ["노말"], maxSlots: 16,
     entryLevel: { 노말: 1640 },
-  },
-  {
-    id: "echidna", category: "kazeroth",
-    name: "에키드나", gates: 2, image: "🐲",
-    difficulties: ["노말", "하드"], maxSlots: 8,
-    entryLevel: { 노말: 1620, 하드: 1640 },
   },
 
   // ── 군단장 레이드 ───────────────────────────
@@ -130,7 +130,7 @@ const RAIDS = [
   // ── 군단장 레이드 ───────────────────────────
   {
     id: "abrelshud_legion", category: "legion",
-    name: "아브렐슈드", tag: "군단장", gates: 4, image: "👁️",
+    name: "아브렐슈드", gates: 4, image: "👁️",
     difficulties: ["노말", "하드"], maxSlots: 8,
     entryLevel: { 노말: 1490, 하드: 1540 },
     // 관문별 입장 레벨: 노말 1,2관문 1490 / 3관문 1500 / 4관문 1520

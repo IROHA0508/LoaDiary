@@ -8,7 +8,7 @@ import { useUser } from '../hooks/useUser'
 /* ─────────────────────────────────────────────
    레이드 섹션 레이아웃 상수
    ───────────────────────────────────────────── */
-const RAID_ROW_HEIGHT = 56        // 레이드 1행 높이(px) — py-3.5(14px*2) + 내용
+const RAID_ROW_HEIGHT = 112        // 레이드 1행 높이(px) — py-3.5(14px*2) + 내용
 const RAID_SCROLL_THRESHOLD = 5   // 이 개수부터 스크롤 활성화
 const RAID_SECTION_HEIGHT = RAID_ROW_HEIGHT * RAID_SCROLL_THRESHOLD  // 280px
 
@@ -774,7 +774,7 @@ export default function MainPage() {
               {isMyRaid(raidToDelete.id) ? '레이드 삭제' : '레이드 나가기'}
             </h3>
             <p className="text-sm text-gray-400">
-              <span className="text-white font-medium">{raidToDelete.raid_name}</span>
+              <span className="text-white font-medium">{raidToDelete.raid_name} / {raidToDelete.difficulty}</span>
               {isMyRaid(raidToDelete.id) ? (
                 <> 레이드를 삭제할까요?<br />이 작업은 되돌릴 수 없어요.</>
               ) : (
