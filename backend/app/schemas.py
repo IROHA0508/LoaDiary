@@ -94,6 +94,9 @@ class RaidSlotResponse(BaseModel):
   id: str
   raid_id: str
   character_id: str
+  character_name: Optional[str] = None
+  class_name: Optional[str] = None       # 직업명 (시너지 계산용)
+  is_support: Optional[bool] = None
   slot_order: int
   role: Optional[str]
 

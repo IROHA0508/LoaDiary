@@ -255,9 +255,9 @@ async def delete_raid(raid_id: str):
   if not result.data:
     raise HTTPException(status_code=404, detail="레이드를 찾을 수 없습니다.")
   
-# 슬롯 목록 조회
 @router.get("/{raid_id}/slots", response_model=List[RaidSlotResponse])
 async def get_slots(raid_id: str):
+  # 1. 슬롯 목록 조회
   result = (
     supabase.table("raid_slots")
     .select("*")
@@ -265,8 +265,31 @@ async def get_slots(raid_id: str):
     .order("slot_order")
     .execute()
   )
-
-  return result.data
+ 
+  slots = result.data
+  if not slots:
+    return []
+ 
+  # 2. 슬롯의 character_id로 캐릭터 정보(이름·직업·서포터 여부) 일괄 조회
+  character_ids = list(set(s["character_id"] for s in slots))
+  char_result = (
+    supabase.table("characters")
+    .select("id, name, class, is_support")
+    .in_("id", character_ids)
+    .execute()
+  )
+ 
+  # id → 캐릭터 정보 맵
+  char_map = {c["id"]: c for c in char_result.data}
+ 
+  # 3. 슬롯 데이터에 캐릭터 이름·직업·역할 추가
+  for slot in slots:
+    char = char_map.get(slot["character_id"])
+    slot["character_name"] = char["name"] if char else None
+    slot["class_name"] = char["class"] if char else None       # DB 컬럼명은 "class"
+    slot["is_support"] = char.get("is_support") if char else None
+ 
+  return slots
 
 # 슬롯에 캐릭터 배치
 @router.post("/{raid_id}/slots", response_model=RaidSlotResponse, status_code=201)

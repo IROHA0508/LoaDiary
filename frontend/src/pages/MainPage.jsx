@@ -57,6 +57,98 @@ const DragHandle = () => (
 )
 
 /* ─────────────────────────────────────────────
+   직업 → 시너지 매핑 (아크패시브 깨달음 기준)
+   CSV: lostark_class_arkpassive_synergy.csv
+   ───────────────────────────────────────────── */
+// 시너지 태그 정의: { id, label, color }
+const SYNERGY_META = {
+  방깎:     { label: '방깎',   bg: 'rgba(239,68,68,0.15)',   border: 'rgba(239,68,68,0.4)',   text: '#f87171' },
+  피증:     { label: '피증',   bg: 'rgba(96,165,250,0.15)',  border: 'rgba(96,165,250,0.4)',  text: '#60a5fa' },
+  방향성피증: { label: '방향피증', bg: 'rgba(34,211,238,0.12)', border: 'rgba(34,211,238,0.35)', text: '#22d3ee' },
+  치적:     { label: '치적',   bg: 'rgba(251,191,36,0.15)',  border: 'rgba(251,191,36,0.4)',  text: '#fbbf24' },
+  치피증:   { label: '치피증', bg: 'rgba(249,115,22,0.15)',  border: 'rgba(249,115,22,0.4)',  text: '#fb923c' },
+  공증:     { label: '공증',   bg: 'rgba(34,197,94,0.15)',   border: 'rgba(34,197,94,0.4)',   text: '#4ade80' },
+  마나재생:  { label: '마나재생', bg: 'rgba(167,139,250,0.15)', border: 'rgba(167,139,250,0.4)', text: '#a78bfa' },
+}
+
+// 표시 우선순위 (중요도 순)
+const SYNERGY_ORDER = ['방깎', '피증', '방향성피증', '치적', '치피증', '공증', '마나재생']
+
+// 직업 → 시너지 태그 배열 (CSV 기반)
+const CLASS_SYNERGY = {
+  '아르카나':     ['치적'],
+  '서머너':       ['방깎', '마나재생'],
+  '소서리스':     ['피증'],
+  '바드':         ['방깎', '마나재생'],
+  '디스트로이어': ['방깎'],
+  '워로드':       ['피증', '방향성피증', '방깎'],  // 전투태세: 방깎도 포함
+  '버서커':       ['피증'],
+  '홀리나이트':   ['치피증'],
+  '슬레이어':     ['피증'],
+  '발키리':       ['치피증'],
+  '배틀마스터':   ['치적'],
+  '인파이터':     ['피증'],
+  '기공사':       ['공증'],
+  '창술사':       ['치피증'],
+  '스트라이커':   ['치적'],
+  '브레이커':     ['피증'],
+  '데빌헌터':     ['치적'],
+  '블래스터':     ['방깎'],
+  '호크아이':     ['피증'],
+  '스카우터':     ['공증'],
+  '건슬링어':     ['치적'],
+  '블레이드':     ['피증', '방향성피증'],
+  '데모닉':       ['피증'],
+  '리퍼':         ['방깎'],
+  '소울이터':     ['피증'],
+  '기상술사':     ['치적'],
+  '환수사':       ['방깎'],
+  '도화가':       ['방깎'],
+  '가디언나이트': ['피증'],
+}
+
+// 파티 내 배치된 캐릭터들의 시너지 태그 집합을 계산
+// is_support === true 인 캐릭터(발키리-빛의기사, 도화가-만개, 바드-절실한구원, 홀리나이트-축복의오라 등)는
+// 서포터 빌드로 시너지를 제공하지 않으므로 제외
+function calcPartySynergies(partySlots) {
+  const synSet = new Set()
+  partySlots.forEach(({ char }) => {
+    if (!char?.class_name) return
+    if (char.is_support === true) return   // 서포터 빌드 → 시너지 없음
+    const tags = CLASS_SYNERGY[char.class_name] || []
+    tags.forEach(t => synSet.add(t))
+  })
+  // 우선순위 순으로 정렬해서 반환
+  return SYNERGY_ORDER.filter(s => synSet.has(s))
+}
+
+/* ─────────────────────────────────────────────
+   시너지 뱃지 컴포넌트
+   ───────────────────────────────────────────── */
+const SynergyBadge = ({ tag, faded }) => {
+  const meta = SYNERGY_META[tag]
+  if (!meta) return null
+  return (
+    <span
+      style={{
+        fontSize: 10,
+        fontWeight: 600,
+        padding: '1px 5px',
+        borderRadius: 4,
+        border: `1px solid ${faded ? 'rgba(100,116,139,0.2)' : meta.border}`,
+        background: faded ? 'transparent' : meta.bg,
+        color: faded ? '#4b5563' : meta.text,
+        flexShrink: 0,
+        letterSpacing: '0.01em',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {meta.label}
+    </span>
+  )
+}
+
+/* ─────────────────────────────────────────────
    메인 페이지
    ───────────────────────────────────────────── */
 export default function MainPage() {
@@ -280,6 +372,34 @@ export default function MainPage() {
               >
                 {raids.map((raid, index) => {
                   const isDone = completedRaids.has(raid.id)
+                  const raidSlots = (slotsMap[raid.id] || []).slice().sort((a, b) => a.slot_order - b.slot_order)
+
+                  // 파티 구조 생성 (4인 1파티)
+                  const PARTY_SIZE = 4
+                  const numParties = Math.ceil(raid.max_slots / PARTY_SIZE)
+                  const parties = Array.from({ length: numParties }, (_, pi) => {
+                    const slotIndices = Array.from(
+                      { length: Math.min(PARTY_SIZE, raid.max_slots - pi * PARTY_SIZE) },
+                      (_, si) => pi * PARTY_SIZE + si
+                    )
+                    const slots = slotIndices.map(order => {
+                      const slotData = raidSlots.find(s => s.slot_order === order)
+                      const myChar = slotData ? characters.find(c => c.id === slotData.character_id) : null
+                      return {
+                        order,
+                        char: slotData ? {
+                          name:       slotData.character_name ?? myChar?.name       ?? null,
+                          is_support: slotData.is_support     ?? myChar?.is_support ?? null,
+                          class_name: slotData.class_name     ?? myChar?.class_name ?? null,
+                        } : null
+                      }
+                    })
+                    return { partyIndex: pi, slots }
+                  })
+
+                  // 배치된 캐릭터가 하나라도 있는 파티만 표시
+                  const filledParties = parties.filter(p => p.slots.some(s => s.char?.name))
+
                   return (
                     <div
                       key={raid.id}
@@ -289,119 +409,153 @@ export default function MainPage() {
                       onDrop={handleDrop}
                       onDragEnd={handleDragEnd}
                       onClick={() => navigate(`/raids/${raid.id}`)}
-                      // ── [수정 4] 완료 시 시각적 변화 ─────────
-                      className={`flex items-center gap-3 px-4 py-3.5 border-b border-gray-800 last:border-b-0 transition-colors group cursor-pointer ${
+                      className={`border-b border-gray-800 last:border-b-0 transition-colors group cursor-pointer ${
                         isDone
                           ? 'bg-gray-800/30 hover:bg-gray-800/40 opacity-60'
                           : 'hover:bg-gray-800/50'
                       }`}
                     >
-                      {/* 드래그 핸들 */}
-                      <div
-                        onClick={(e) => e.stopPropagation()}
-                        className="opacity-30 group-hover:opacity-70 transition-opacity"
-                      >
-                        <DragHandle />
-                      </div>
+                      {/* ── 메인 정보 행 ── */}
+                      <div className="flex items-center gap-3 px-4 py-3">
 
-                      {/* ── [수정 2] 완료 체크박스 ── */}
-                      <div
-                        onClick={(e) => toggleCompleted(e, raid.id)}
-                        className="flex-shrink-0 flex items-center justify-center w-4 h-4 rounded border transition-all"
-                        style={{
-                          borderColor: isDone ? '#10b981' : '#4b5563',
-                          backgroundColor: isDone ? '#10b981' : 'transparent',
-                        }}
-                      >
-                        {isDone && (
-                          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                            <path d="M2 5l2.5 2.5L8 3" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                          </svg>
+                        {/* 드래그 핸들 */}
+                        <div
+                          onClick={(e) => e.stopPropagation()}
+                          className="opacity-30 group-hover:opacity-70 transition-opacity"
+                        >
+                          <DragHandle />
+                        </div>
+
+                        {/* 완료 체크박스 */}
+                        <div
+                          onClick={(e) => toggleCompleted(e, raid.id)}
+                          className="flex-shrink-0 flex items-center justify-center w-4 h-4 rounded border transition-all"
+                          style={{
+                            borderColor: isDone ? '#10b981' : '#4b5563',
+                            backgroundColor: isDone ? '#10b981' : 'transparent',
+                          }}
+                        >
+                          {isDone && (
+                            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                              <path d="M2 5l2.5 2.5L8 3" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                          )}
+                        </div>
+
+                        {/* 난이도 배지 */}
+                        <span
+                          className={`text-[10px] font-medium rounded-full py-0.5 text-center flex-shrink-0 ${
+                            isDone
+                              ? 'bg-gray-700/50 text-gray-500'
+                              : (DIFF_STYLE[raid.difficulty] || 'bg-gray-700 text-gray-300')
+                          }`}
+                          style={{ width: '64px' }}
+                        >
+                          {raid.difficulty}
+                        </span>
+
+                        {/* 레이드 이름 */}
+                        <div className="flex-1 min-w-0">
+                          <span className={`text-sm font-medium truncate block ${
+                            isDone ? 'text-gray-500 line-through decoration-gray-600' : 'text-white'
+                          }`}>
+                            {raid.raid_name}
+                          </span>
+                        </div>
+
+                        {/* 내가 만든 / 참여 중 태그 */}
+                        {isMyRaid(raid.id) ? (
+                          <span className={`text-xs px-2 py-0.5 rounded flex-shrink-0 ${
+                            isDone ? 'text-gray-600 bg-gray-800/50' : 'text-blue-400 bg-blue-400/10'
+                          }`}>
+                            내가 만든
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-500 bg-gray-800 px-2 py-0.5 rounded flex-shrink-0">
+                            참여 중
+                          </span>
                         )}
+
+                        {/* 삭제 / 나가기 버튼 */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setRaidToDelete(raid)
+                          }}
+                          className="text-xs text-gray-600 hover:text-red-400 hover:bg-red-400/10 px-2 py-1 rounded transition-colors flex-shrink-0"
+                        >
+                          {isMyRaid(raid.id) ? '삭제' : '나가기'}
+                        </button>
                       </div>
 
-                      {/* 난이도 배지 — 고정 너비 */}
-                      <span
-                        className={`text-[10px] font-medium rounded-full py-0.5 text-center flex-shrink-0 ${
-                          isDone
-                            ? 'bg-gray-700/50 text-gray-500'
-                            : (DIFF_STYLE[raid.difficulty] || 'bg-gray-700 text-gray-300')
-                        }`}
-                        style={{ width: '64px' }}
-                      >
-                        {raid.difficulty}
-                      </span>
-
-                      {/* 레이드 이름 + 배치 중 배지 */}
-                      <div className="flex-1 min-w-0 flex items-center gap-2">
-                        <span className={`text-sm font-medium truncate ${isDone ? 'text-gray-500 line-through decoration-gray-600' : 'text-white'}`}>
-                          {raid.raid_name}
-                        </span>
-                        {(() => {
-                          const slots = slotsMap[raid.id] || []
-                          const placedCharIds = new Set(slots.map(s => s.character_id))
-                          const placedChar = characters.find(c => placedCharIds.has(c.id))
-                          if (!placedChar) return null
-                          return (
-                            <span className={`flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded flex-shrink-0 whitespace-nowrap ${
-                              isDone ? 'text-gray-600 bg-gray-800/50' : 'text-amber-400 bg-amber-400/10'
-                            }`}>
-                              <svg width="6" height="6" viewBox="0 0 6 6" fill="currentColor" className="flex-shrink-0">
-                                <circle cx="3" cy="3" r="3"/>
-                              </svg>
-                              {placedChar.name} 배치 중
-                            </span>
-                          )
-                        })()}
-                      </div>
-
-                      {/* 슬롯 파이프 — 4개 단위로 파티 구분 */}
-                      <div className="flex items-center gap-1 flex-shrink-0">
-                        {Array.from({ length: raid.max_slots }).map((_, i) => {
-                          const isFilled = (slotsMap[raid.id] || [])
-                            .some(s => s.slot_order === i)
-                          const isPartyBreak = i > 0 && i % 4 === 0
-                          return (
-                            <span key={i} className="flex items-center gap-1">
-                              {isPartyBreak && (
-                                <span className="block w-px h-3 bg-gray-700 mx-0.5 flex-shrink-0" />
-                              )}
-                              <span
-                                className={`block w-2 h-2 rounded-full flex-shrink-0 transition-colors ${
+                      {/* ── 파티별 캐릭터 + 시너지 표시 ── */}
+                      {filledParties.length > 0 && (
+                        <div className="px-4 pb-3 flex flex-wrap gap-2">
+                          {filledParties.map(party => {
+                            const synergies = calcPartySynergies(party.slots)
+                            return (
+                              <div
+                                key={party.partyIndex}
+                                className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg border ${
                                   isDone
-                                    ? 'bg-gray-700'
-                                    : isFilled ? 'bg-blue-400' : 'bg-gray-700'
+                                    ? 'border-gray-700/40 bg-gray-800/20'
+                                    : 'border-gray-700/60 bg-gray-800/40'
                                 }`}
-                              />
-                            </span>
-                          )
-                        })}
-                      </div>
+                              >
+                                {/* 파티 번호 — 항상 표시 */}
+                                <span className={`text-[10px] font-bold flex-shrink-0 ${
+                                  isDone ? 'text-gray-600' : 'text-gray-500'
+                                }`}>
+                                  {party.partyIndex + 1}파티
+                                </span>
+                                <span className="w-px h-3 bg-gray-700/80 flex-shrink-0" />
 
-                      {/* 내가 만든 / 참여 중 태그 */}
-                      {isMyRaid(raid.id) ? (
-                        <span className={`text-xs px-2 py-0.5 rounded flex-shrink-0 ${isDone ? 'text-gray-600 bg-gray-800/50' : 'text-blue-400 bg-blue-400/10'}`}>
-                          내가 만든
-                        </span>
-                      ) : (
-                        <span className="text-xs text-gray-500 bg-gray-800 px-2 py-0.5 rounded flex-shrink-0">
-                          참여 중
-                        </span>
+                                {/* 캐릭터 목록 */}
+                                <div className="flex items-center gap-1.5">
+                                  {party.slots.map(({ order, char }, si) => (
+                                    <div key={order} className="flex items-center gap-1">
+                                      {char?.name ? (
+                                        <>
+                                          <span className="flex-shrink-0">
+                                            {char.is_support ? <SupportIcon /> : <DealerIcon />}
+                                          </span>
+                                          <span className={`text-[11px] font-medium ${
+                                            isDone ? 'text-gray-600' : 'text-gray-200'
+                                          }`}>
+                                            {char.name}
+                                          </span>
+                                        </>
+                                      ) : (
+                                        <span className={`text-[11px] ${isDone ? 'text-gray-700' : 'text-gray-600'}`}>—</span>
+                                      )}
+                                      {si < party.slots.length - 1 && (
+                                        <span className="text-gray-700 text-[10px]">·</span>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+
+                                {/* 시너지 뱃지 — class_name 있는 캐릭터가 있을 때만 */}
+                                {synergies.length > 0 && (
+                                  <>
+                                    <span className="w-px h-3 bg-gray-700/80 flex-shrink-0 mx-0.5" />
+                                    <div className="flex items-center gap-1">
+                                      {synergies.map(tag => (
+                                        <SynergyBadge key={tag} tag={tag} faded={isDone} />
+                                      ))}
+                                    </div>
+                                  </>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
                       )}
-
-                      {/* 삭제 / 나가기 버튼 */}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setRaidToDelete(raid)
-                        }}
-                        className="text-xs text-gray-600 hover:text-red-400 hover:bg-red-400/10 px-2 py-1 rounded transition-colors flex-shrink-0"
-                      >
-                        {isMyRaid(raid.id) ? '삭제' : '나가기'}
-                      </button>
                     </div>
                   )
                 })}
+
+
               </div>
             )}
           </section>

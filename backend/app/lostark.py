@@ -9,7 +9,7 @@ BASE_URL = "https://developer-lostark.game.onstove.com"
 
 # ── 서포터 판별용 직업 각인 목록 ──────────────────────
 # 해당 각인이 Effects에 있으면 서포터 빌드로 판정
-SUPPORT_ENGRAVINGS = {"축복의 오라", "빛의 기사", "절실한 구원", "만개"}
+SUPPORT_ARKPASSIVE = {"축복의 오라", "해방자", "절실한 구원", "만개"}
 
 
 def _headers() -> dict:
@@ -67,7 +67,7 @@ async def get_character_engravings(character_name: str, client: httpx.AsyncClien
       if not data:
         return False
       title = data.get("Title", "")
-      if title in SUPPORT_ENGRAVINGS:
+      if title in SUPPORT_ARKPASSIVE:
         return True
   except Exception:
     pass
