@@ -7,7 +7,7 @@ import { useUser } from '../hooks/useUser'
 import { supabase } from '../lib/supabase'
 import GroupModal from '../components/GroupModal'
 import GroupCreateModal from '../components/GroupCreateModal'
-import { getMyGroups } from '../api/groups'
+import { getMyGroups, reorderGroups } from '../api/groups'
 
 /* ─────────────────────────────────────────────
    레이드 섹션 레이아웃 상수
@@ -184,8 +184,11 @@ export default function MainPage() {
   // 그룹 관련 상태
   const [groups, setGroups]             = useState([])
   const [groupLoading, setGroupLoading] = useState(true)
-  const [groupCreateOpen, setGroupCreateOpen] = useState(false)  // 생성 모달
-  const [activeGroup, setActiveGroup]   = useState(null)         // 상세 모달
+  const [groupCreateOpen, setGroupCreateOpen] = useState(false)
+  const [activeGroup, setActiveGroup]   = useState(null)
+  // 그룹 드래그 순서 변경
+  const groupDragIdx  = useRef(null)
+  const groupDragOver = useRef(null)
 
   const handleCharSearch = (e) => {
     e.preventDefault()
@@ -416,6 +419,23 @@ export default function MainPage() {
 
   // 그룹 생성: 플로우 모달 오픈
   const handleCreateGroup = () => setGroupCreateOpen(true)
+
+  // 그룹 드래그&드롭 핸들러
+  const handleGroupDragStart = (idx) => { groupDragIdx.current = idx }
+  const handleGroupDragOver  = (e, idx) => { e.preventDefault(); groupDragOver.current = idx }
+  const handleGroupDrop      = async () => {
+    const from = groupDragIdx.current
+    const to   = groupDragOver.current
+    if (from === null || to === null || from === to) return
+    const reordered = [...groups]
+    const [moved] = reordered.splice(from, 1)
+    reordered.splice(to, 0, moved)
+    setGroups(reordered)                                         // 낙관적 업데이트
+    groupDragIdx.current = null; groupDragOver.current = null
+    try { await reorderGroups(fingerprint, reordered.map(g => g.id)) }
+    catch { /* 실패 시 그대로 유지 (재조회 불필요) */ }
+  }
+  const handleGroupDragEnd = () => { groupDragIdx.current = null; groupDragOver.current = null }
   /* ── 내가 만든 레이드 여부 ────────────────── */
   const isMyRaid = (raidId) => myRaids.some(r => r.id === raidId)
 
@@ -446,6 +466,15 @@ export default function MainPage() {
         .raid-scroll::-webkit-scrollbar-thumb:hover {
           background: rgba(107, 114, 128, 0.65);
         }
+        .group-grid-scroll::-webkit-scrollbar { width: 3px; }
+        .group-grid-scroll::-webkit-scrollbar-track { background: transparent; }
+        .group-grid-scroll::-webkit-scrollbar-thumb {
+          background: rgba(75, 85, 99, 0.45);
+          border-radius: 4px;
+        }
+        .group-grid-scroll::-webkit-scrollbar-thumb:hover {
+          background: rgba(107, 114, 128, 0.65);
+        }
       `}</style>
 
       {/* ── 바디 레이아웃 — Layout 헤더와 동일한 max-w-[1400px] px-8 flex gap-5 ── */}
@@ -454,7 +483,11 @@ export default function MainPage() {
         {/* ── 메인 영역 ──────────────────────── */}
         <main className="flex-1 min-w-0 flex flex-col gap-4">
 
-          {/* ━━━━━ 내 그룹 섹션 ━━━━━ */}
+          {/* ━━━━━ 내 그룹 섹션 ━━━━━
+              - 항상 2행(6슬롯) 높이 고정: 그룹 0개여도 동일 크기 유지
+              - 7개 이상이면 스크롤 활성화
+              - 드래그로 순서 변경 가능
+          */}
           <section className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
             {/* 헤더 */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
@@ -473,39 +506,62 @@ export default function MainPage() {
                 + 그룹 생성
               </button>
             </div>
-          
-            {/* 그룹 슬롯 목록 */}
-            {groupLoading ? (
-              <div className="px-4 py-4 text-sm text-gray-500">불러오는 중...</div>
-            ) : groups.length === 0 ? (
-              <div className="flex flex-col items-center justify-center text-center py-5">
-                <p className="text-sm text-gray-500">그룹이 없어요.</p>
-                <button
-                  onClick={handleCreateGroup}
-                  className="mt-3 text-sm text-blue-400 hover:text-blue-300"
-                >
-                  첫 그룹 만들기 →
-                </button>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-3">
-                {groups.map(group => (
+
+            {/* 그룹 그리드 — 항상 2행(~152px) 고정, 7개 이상 스크롤 */}
+            <div
+              className="group-grid-scroll overflow-y-auto p-3"
+              style={{ height: '152px' }}
+            >
+              {groupLoading ? (
+                <div className="flex items-center justify-center h-full text-sm text-gray-500">
+                  불러오는 중...
+                </div>
+              ) : groups.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full">
+                  <p className="text-sm text-gray-500">그룹이 없어요.</p>
                   <button
-                    key={group.id}
-                    onClick={() => setActiveGroup(group)}
-                    className="flex flex-col items-start gap-1 bg-gray-800 hover:bg-gray-750 border border-gray-700 hover:border-gray-600 rounded-lg px-3 py-2.5 transition-all text-left group"
-                    style={{ '--tw-bg-opacity': 1 }}
+                    onClick={handleCreateGroup}
+                    className="mt-3 text-sm text-blue-400 hover:text-blue-300"
                   >
-                    <span className="text-sm font-medium text-gray-200 truncate w-full group-hover:text-white transition-colors">
-                      {group.name}
-                    </span>
-                    <span className="text-xs text-gray-500">
-                      원정대 {group.members.length}개
-                    </span>
+                    첫 그룹 만들기 →
                   </button>
-                ))}
-              </div>
-            )}
+                </div>
+              ) : (
+                <div className="grid grid-cols-3 gap-2">
+                  {groups.map((group, index) => (
+                    <div
+                      key={group.id}
+                      draggable
+                      onDragStart={() => handleGroupDragStart(index)}
+                      onDragOver={(e) => handleGroupDragOver(e, index)}
+                      onDrop={handleGroupDrop}
+                      onDragEnd={handleGroupDragEnd}
+                      onClick={() => setActiveGroup(group)}
+                      className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700/80 border border-gray-700 hover:border-gray-600 rounded-lg px-2.5 py-2 transition-all cursor-pointer group/gcard"
+                    >
+                      {/* 드래그 핸들 */}
+                      <div
+                        onClick={e => e.stopPropagation()}
+                        className="flex-shrink-0 flex flex-col gap-[3px] opacity-20 group-hover/gcard:opacity-60 transition-opacity cursor-grab active:cursor-grabbing"
+                      >
+                        <span className="block w-[12px] h-[1.5px] bg-gray-400 rounded"/>
+                        <span className="block w-[12px] h-[1.5px] bg-gray-400 rounded"/>
+                        <span className="block w-[12px] h-[1.5px] bg-gray-400 rounded"/>
+                      </div>
+                      {/* 텍스트 */}
+                      <div className="flex flex-col gap-0.5 min-w-0">
+                        <span className="text-sm font-medium text-gray-200 truncate group-hover/gcard:text-white transition-colors">
+                          {group.name}
+                        </span>
+                        <span className="text-xs text-gray-500">
+                          멤버 {group.members.length}명
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </section>
 
           {/* 내 레이드 섹션 */}

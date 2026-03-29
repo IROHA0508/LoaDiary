@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { updateGroupName, addGroupMember, removeGroupMember, deleteGroup, reorderGroupMembers } from '../api/groups'
+import { updateGroupName, addGroupMember, removeGroupMember, deleteGroup } from '../api/groups'
 
 /* ───────────────────────────────────────────────────────────
    GroupModal — 그룹 상세/편집 모달
@@ -13,27 +13,25 @@ export default function GroupModal({ group, onClose, onUpdated, onDeleted }) {
   const [editingName, setEditingName]     = useState(false)
   const [nameInput, setNameInput]         = useState(group.name)
   const [nameSaving, setNameSaving]       = useState(false)
-
+ 
   const [addInput, setAddInput]           = useState('')
   const [addError, setAddError]           = useState('')
   const [addLoading, setAddLoading]       = useState(false)
-
+ 
   const [removingId, setRemovingId]       = useState(null)
   const [deleting, setDeleting]           = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
-
-  // 드래그 순서 변경용
+ 
   const [localMembers, setLocalMembers]   = useState(group.members)
   const dragIdx   = useRef(null)
   const dragOver  = useRef(null)
   const [reordering, setReordering]       = useState(false)
-
+ 
   const nameRef = useRef(null)
   useEffect(() => { if (editingName) nameRef.current?.focus() }, [editingName])
-  // group.members가 외부에서 갱신되면 로컬 목록도 동기화
   useEffect(() => { setLocalMembers(group.members) }, [group.members])
-
-  /* ── 이름 저장 ───────────────────────────────── */
+ 
+  /* ── 이름 저장 ── */
   const handleSaveName = async () => {
     const trimmed = nameInput.trim()
     if (!trimmed || trimmed === group.name) { setEditingName(false); return }
@@ -44,8 +42,8 @@ export default function GroupModal({ group, onClose, onUpdated, onDeleted }) {
     } catch { setNameInput(group.name) }
     finally { setNameSaving(false); setEditingName(false) }
   }
-
-  /* ── 멤버 추가 ───────────────────────────────── */
+ 
+  /* ── 멤버 추가 (백엔드에서 존재 여부 검증, 에러는 서버 메시지 그대로) ── */
   const handleAddMember = async () => {
     const rep = addInput.trim()
     if (!rep) return
@@ -59,8 +57,8 @@ export default function GroupModal({ group, onClose, onUpdated, onDeleted }) {
       setAddError(err?.response?.data?.detail || '추가에 실패했습니다.')
     } finally { setAddLoading(false) }
   }
-
-  /* ── 멤버 제거 ───────────────────────────────── */
+ 
+  /* ── 멤버 제거 ── */
   const handleRemoveMember = async (memberRowId) => {
     setRemovingId(memberRowId)
     try {
@@ -70,45 +68,35 @@ export default function GroupModal({ group, onClose, onUpdated, onDeleted }) {
     } catch {}
     finally { setRemovingId(null) }
   }
-
-  /* ── 드래그 핸들러 (순서 변경) ───────────────── */
+ 
+  /* ── 드래그 순서 변경 ── */
   const handleDragStart = (idx) => { dragIdx.current = idx }
   const handleDragOver  = (e, idx) => { e.preventDefault(); dragOver.current = idx }
   const handleDrop      = async () => {
     const from = dragIdx.current
     const to   = dragOver.current
     if (from === null || to === null || from === to) return
-
     const reordered = [...localMembers]
     const [moved] = reordered.splice(from, 1)
     reordered.splice(to, 0, moved)
-
-    // 낙관적 업데이트 먼저
     setLocalMembers(reordered)
-    dragIdx.current = null
-    dragOver.current = null
-
-    // 서버 동기화
+    dragIdx.current = null; dragOver.current = null
     setReordering(true)
     try {
       const updated = await reorderGroupMembers(group.id, reordered.map(m => m.member_row_id))
       onUpdated(updated)
-    } catch {
-      setLocalMembers(group.members) // 실패 시 복원
-    } finally { setReordering(false) }
+    } catch { setLocalMembers(group.members) }
+    finally { setReordering(false) }
   }
   const handleDragEnd = () => { dragIdx.current = null; dragOver.current = null }
-
-  /* ── 그룹 삭제 ───────────────────────────────── */
+ 
+  /* ── 그룹 삭제 ── */
   const handleDelete = async () => {
     setDeleting(true)
-    try {
-      await deleteGroup(group.id)
-      onDeleted(group.id)
-      onClose()
-    } catch { setDeleting(false) }
+    try { await deleteGroup(group.id); onDeleted(group.id); onClose() }
+    catch { setDeleting(false) }
   }
-
+ 
   return (
     <>
       <style>{`
@@ -117,11 +105,18 @@ export default function GroupModal({ group, onClose, onUpdated, onDeleted }) {
         .gm-scroll::-webkit-scrollbar-thumb { background: rgba(75,85,99,0.45); border-radius: 4px; }
         .gm-scroll::-webkit-scrollbar-thumb:hover { background: rgba(107,114,128,0.65); }
       `}</style>
-
-      <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.65)' }} onClick={onClose}>
-        <div className="relative w-full max-w-md mx-4 bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
-
-          {/* 헤더 */}
+ 
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center"
+        style={{ background: 'rgba(0,0,0,0.65)' }}
+        onClick={onClose}
+      >
+        {/* GroupCreateModal과 동일: max-w-md, rounded-2xl */}
+        <div
+          className="relative w-full max-w-md mx-4 bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl overflow-hidden"
+          onClick={e => e.stopPropagation()}
+        >
+          {/* ── 헤더 (py-4, text-base) ── */}
           <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800">
             {editingName ? (
               <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -154,17 +149,18 @@ export default function GroupModal({ group, onClose, onUpdated, onDeleted }) {
               </svg>
             </button>
           </div>
-
-          {/* 바디 */}
-          <div className="px-5 py-4">
-
-            {/* 원정대 추가 입력 (멤버 목록 위) */}
-            <div className="mb-4">
+ 
+          {/* ── 바디 (px-5 py-4, gap-4 — GroupCreateModal과 동일) ── */}
+          <div className="px-5 py-4 flex flex-col gap-4">
+ 
+            {/* 멤버 추가 입력 */}
+            <div>
+              <label className="block text-xs font-medium text-gray-400 uppercase tracking-wide mb-1.5">멤버 추가</label>
               <div className="flex gap-2">
                 <input
                   value={addInput}
                   onChange={e => { setAddInput(e.target.value); setAddError('') }}
-                  onKeyDown={e => e.key === 'Enter' && handleAddMember()}
+                  onKeyDown={e => e.key === 'Enter' && !addLoading && handleAddMember()}
                   placeholder="대표 캐릭터명 입력"
                   className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 outline-none focus:border-blue-500 transition-colors"
                 />
@@ -173,76 +169,80 @@ export default function GroupModal({ group, onClose, onUpdated, onDeleted }) {
                   disabled={addLoading || !addInput.trim()}
                   className="text-xs px-3 py-2 text-gray-400 border border-gray-700 rounded-lg hover:bg-gray-800 hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
                 >
-                  {addLoading ? '추가 중…' : '+ 추가'}
+                  {addLoading ? (
+                    <svg className="animate-spin w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" strokeOpacity="0.25"/>
+                      <path d="M21 12a9 9 0 00-9-9"/>
+                    </svg>
+                  ) : '+ 추가'}
                 </button>
               </div>
               {addError && <p className="mt-1.5 text-xs text-red-400">{addError}</p>}
             </div>
-
-            {/* 멤버 목록 헤더 */}
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">원정대 멤버</span>
-              <div className="flex items-center gap-2">
-                {reordering && <span className="text-xs text-gray-500">저장 중…</span>}
-                <span className="text-xs text-gray-500">{localMembers.length}개</span>
+ 
+            {/* 그룹 멤버 목록 */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">그룹 멤버</span>
+                <div className="flex items-center gap-2">
+                  {reordering && <span className="text-xs text-gray-500">저장 중…</span>}
+                  <span className="text-xs text-gray-500">{localMembers.length}개</span>
+                </div>
+              </div>
+ 
+              {/* maxHeight/minHeight → GroupCreateModal과 완전히 동일 */}
+              <div className="gm-scroll flex flex-col gap-2 overflow-y-auto pr-0.5" style={{ minHeight: '208px', maxHeight: '208px' }}>
+                {localMembers.length === 0 ? (
+                  <div className="flex items-center justify-center h-full text-sm text-gray-600">
+                    아직 멤버가 없어요.
+                  </div>
+                ) : (
+                  localMembers.map((m, idx) => (
+                    <div
+                      key={m.member_row_id}
+                      draggable
+                      onDragStart={() => handleDragStart(idx)}
+                      onDragOver={(e) => handleDragOver(e, idx)}
+                      onDrop={handleDrop}
+                      onDragEnd={handleDragEnd}
+                      className="flex items-center justify-between bg-gray-800 rounded-lg px-2 py-2 cursor-default group/card"
+                    >
+                      {/* 드래그 핸들 */}
+                      <div className="flex-shrink-0 flex flex-col gap-[3px] px-1 py-1 opacity-30 group-hover/card:opacity-70 transition-opacity cursor-grab active:cursor-grabbing">
+                        <span className="block w-[14px] h-[1.5px] bg-gray-400 rounded"/>
+                        <span className="block w-[14px] h-[1.5px] bg-gray-400 rounded"/>
+                        <span className="block w-[14px] h-[1.5px] bg-gray-400 rounded"/>
+                      </div>
+                      <div className="flex items-center gap-2 flex-1 min-w-0 ml-1">
+                        <span className="w-6 h-6 rounded-full bg-gray-700 flex items-center justify-center text-xs text-gray-400 flex-shrink-0">
+                          {(m.representative || '?')[0]}
+                        </span>
+                        <span className="text-sm text-gray-200 truncate">{m.representative}</span>
+                      </div>
+                      <button
+                        onClick={() => handleRemoveMember(m.member_row_id)}
+                        disabled={removingId === m.member_row_id}
+                        className="flex-shrink-0 text-gray-600 hover:text-red-400 transition-colors disabled:opacity-40 ml-2"
+                      >
+                        {removingId === m.member_row_id ? (
+                          <svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" strokeOpacity="0.25"/>
+                            <path d="M21 12a9 9 0 00-9-9"/>
+                          </svg>
+                        ) : (
+                          <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd"/>
+                          </svg>
+                        )}
+                      </button>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
-
-            {/* 멤버 카드 (드래그 순서 변경) */}
-            <div className="gm-scroll flex flex-col gap-2 overflow-y-auto pr-0.5" style={{ maxHeight: '208px' }}>
-              {localMembers.length === 0 ? (
-                <p className="text-sm text-gray-600 text-center py-4">
-                  아직 멤버가 없어요.<br/>
-                  <span className="text-xs">위에서 원정대를 추가해보세요.</span>
-                </p>
-              ) : (
-                localMembers.map((m, idx) => (
-                  <div
-                    key={m.member_row_id}
-                    draggable
-                    onDragStart={() => handleDragStart(idx)}
-                    onDragOver={(e) => handleDragOver(e, idx)}
-                    onDrop={handleDrop}
-                    onDragEnd={handleDragEnd}
-                    className="flex items-center justify-between bg-gray-800 rounded-lg px-2 py-2 cursor-default group/card"
-                  >
-                    {/* 드래그 핸들 (레이드 UI와 동일한 세 줄 아이콘) */}
-                    <div className="flex-shrink-0 flex flex-col gap-[3px] px-1 py-1 opacity-30 group-hover/card:opacity-70 transition-opacity cursor-grab active:cursor-grabbing">
-                      <span className="block w-[14px] h-[1.5px] bg-gray-400 rounded"/>
-                      <span className="block w-[14px] h-[1.5px] bg-gray-400 rounded"/>
-                      <span className="block w-[14px] h-[1.5px] bg-gray-400 rounded"/>
-                    </div>
-
-                    <div className="flex items-center gap-2 flex-1 min-w-0 ml-1">
-                      <span className="w-6 h-6 rounded-full bg-gray-700 flex items-center justify-center text-xs text-gray-400 flex-shrink-0">
-                        {(m.representative || '?')[0]}
-                      </span>
-                      <span className="text-sm text-gray-200 truncate">{m.representative}</span>
-                    </div>
-
-                    <button
-                      onClick={() => handleRemoveMember(m.member_row_id)}
-                      disabled={removingId === m.member_row_id}
-                      className="flex-shrink-0 text-gray-600 hover:text-red-400 transition-colors disabled:opacity-40 ml-2"
-                    >
-                      {removingId === m.member_row_id ? (
-                        <svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" strokeOpacity="0.25"/>
-                          <path d="M21 12a9 9 0 00-9-9"/>
-                        </svg>
-                      ) : (
-                        <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor">
-                          <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd"/>
-                        </svg>
-                      )}
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
           </div>
-
-          {/* 푸터 — 삭제 (하단 유지: X 닫기와 분리) */}
+ 
+          {/* ── 푸터 (py-3 — GroupCreateModal 취소 버튼 행과 동일 높이) ── */}
           <div className="px-5 py-3 border-t border-gray-800 flex justify-end">
             {confirmDelete ? (
               <div className="flex items-center gap-2">
