@@ -6,7 +6,8 @@ import { getMyRaids, getJoinedRaids, deleteRaid, getSlots } from '../api/raids'
 import { useUser } from '../hooks/useUser'
 import { supabase } from '../lib/supabase'
 import GroupModal from '../components/GroupModal'
-import { getMyGroups, createGroup } from '../api/groups'
+import GroupCreateModal from '../components/GroupCreateModal'
+import { getMyGroups } from '../api/groups'
 
 /* ─────────────────────────────────────────────
    레이드 섹션 레이아웃 상수
@@ -33,10 +34,23 @@ const DIFF_STYLE = {
    딜러 아이콘 (빨간 칼)
    ───────────────────────────────────────────── */
 const DealerIcon = () => (
-  <svg width="13" height="13" viewBox="0 0 12 12" fill="none">
-    <line x1="2" y1="10" x2="10" y2="2" stroke="#ef4444" strokeWidth="2" strokeLinecap="round"/>
-    <line x1="8" y1="1" x2="11" y2="4" stroke="#ef4444" strokeWidth="1.5" strokeLinecap="round"/>
-    <line x1="2" y1="9" x2="4" y2="7" stroke="#ef4444" strokeWidth="1.2" strokeLinecap="round"/>
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+    <g transform="translate(12,12) rotate(-45)">
+      {/* 칼날 */}
+      <polygon points="0,-12 2.8,-3.5 -2.8,-3.5" fill="#ef4444"/>
+      {/* 칼날 하이라이트 */}
+      <polygon points="0,-12 1.2,-8 0,-6" fill="#fca5a5"/>
+      {/* 가드 */}
+      <rect x="-6" y="-3.5" width="12" height="2.8" rx="0.7" fill="#ef4444"/>
+      {/* 손잡이 */}
+      <rect x="-2.2" y="-0.7" width="4.4" height="9" rx="1" fill="#b91c1c"/>
+      {/* 손잡이 줄감기 */}
+      <line x1="-2.2" y1="1.5" x2="2.2" y2="1.5" stroke="#fca5a5" strokeWidth="0.6"/>
+      <line x1="-2.2" y1="3.8" x2="2.2" y2="3.8" stroke="#fca5a5" strokeWidth="0.6"/>
+      <line x1="-2.2" y1="6.1" x2="2.2" y2="6.1" stroke="#fca5a5" strokeWidth="0.6"/>
+      {/* 폼멜 */}
+      <ellipse cx="0" cy="10" rx="3" ry="2" fill="#991b1b"/>
+    </g>
   </svg>
 )
 
@@ -167,11 +181,11 @@ export default function MainPage() {
   // 캐릭터 검색 (헤더 검색창 연결용)
   const [charSearch, setCharSearch] = useState('')
 
-  // 그룹 관련 컴포넌트
-  const [groups, setGroups]               = useState([])
-  const [groupLoading, setGroupLoading]   = useState(true)
-  const [groupCreating, setGroupCreating] = useState(false)
-  const [activeGroup, setActiveGroup]     = useState(null)   // 모달용
+  // 그룹 관련 상태
+  const [groups, setGroups]             = useState([])
+  const [groupLoading, setGroupLoading] = useState(true)
+  const [groupCreateOpen, setGroupCreateOpen] = useState(false)  // 생성 모달
+  const [activeGroup, setActiveGroup]   = useState(null)         // 상세 모달
 
   const handleCharSearch = (e) => {
     e.preventDefault()
@@ -400,16 +414,8 @@ export default function MainPage() {
     }
   }
 
-  // 그룹 생성 핸들러
-  const handleCreateGroup = async () => {
-    if (groupCreating) return
-    setGroupCreating(true)
-    try {
-      const newGroup = await createGroup(fingerprint)
-      setGroups(prev => [...prev, newGroup])
-    } catch {}
-    finally { setGroupCreating(false) }
-  }
+  // 그룹 생성: 플로우 모달 오픈
+  const handleCreateGroup = () => setGroupCreateOpen(true)
   /* ── 내가 만든 레이드 여부 ────────────────── */
   const isMyRaid = (raidId) => myRaids.some(r => r.id === raidId)
 
@@ -462,10 +468,9 @@ export default function MainPage() {
               </div>
               <button
                 onClick={handleCreateGroup}
-                disabled={groupCreating}
-                className="text-xs text-gray-400 px-3 py-1 border border-gray-700 rounded-md hover:bg-gray-800 hover:text-white transition-colors disabled:opacity-40"
+                className="text-xs text-gray-400 px-3 py-1 border border-gray-700 rounded-md hover:bg-gray-800 hover:text-white transition-colors"
               >
-                {groupCreating ? '생성 중…' : '+ 그룹 생성'}
+                + 그룹 생성
               </button>
             </div>
           
@@ -473,10 +478,10 @@ export default function MainPage() {
             {groupLoading ? (
               <div className="px-4 py-4 text-sm text-gray-500">불러오는 중...</div>
             ) : groups.length === 0 ? (
-              <div className="px-4 py-5 text-sm text-gray-600 text-center">
-                그룹이 없어요.{' '}
-                <button 
-                  onClick={handleCreateGroup} 
+              <div className="flex flex-col items-center justify-center text-center py-5">
+                <p className="text-sm text-gray-500">그룹이 없어요.</p>
+                <button
+                  onClick={handleCreateGroup}
                   className="mt-3 text-sm text-blue-400 hover:text-blue-300"
                 >
                   첫 그룹 만들기 →
@@ -944,6 +949,17 @@ export default function MainPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {groupCreateOpen && (
+        <GroupCreateModal
+          fingerprint={fingerprint}
+          onClose={() => setGroupCreateOpen(false)}
+          onCreated={(newGroup) => {
+            setGroups(prev => [...prev, newGroup])
+            setGroupCreateOpen(false)
+          }}
+        />
       )}
 
       {activeGroup && (
