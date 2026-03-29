@@ -26,7 +26,7 @@ app.add_middleware(
     "http://localhost:5173",
 
     # 배포 이후 사용할 프론트엔드 주소
-    "http://*.vercel.app"
+    "https://loakit.vercel.app",
   ],
   allow_credentials = True,
   allow_methods = ["*"],
