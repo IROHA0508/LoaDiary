@@ -145,9 +145,9 @@ export default function GroupCreateModal({ fingerprint, onClose, onCreated }) {
                 <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">그룹 멤버</span>
                 <span className="text-xs text-gray-500">{pendingMembers.length}명</span>
               </div>
-              <div className="gcm-scroll flex flex-col gap-2 overflow-y-auto pr-0.5" style={{ minHeight: '208px', maxHeight: '208px' }}>
+              <div className="gcm-scroll overflow-y-auto pr-0.5" style={{ minHeight: '208px', maxHeight: '208px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 {pendingMembers.length === 0 ? (
-                  <div className="flex items-center justify-center h-full text-sm text-gray-600">
+                  <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }} className="text-sm text-gray-600">
                     아직 추가된 멤버가 없어요.
                   </div>
                 ) : (
