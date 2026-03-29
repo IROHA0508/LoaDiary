@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useUser } from "../../hooks/useUser";
 import { supabase } from "../../lib/supabase";
+import { getMyGroups } from '../../api/groups'
 
 /* ─────────────────────────────────────────────
    난이도 색상 (RaidNewPage와 동일)
@@ -177,6 +178,8 @@ export default function RaidDetailPage() {
   const [searchError, setSearchError] = useState("");
   // 자동 로드된 멤버 representative 목록 (배지 표시용)
   const [autoLoadedReps, setAutoLoadedReps] = useState(new Set());
+  // 내 그룹 목록
+  const [myGroups, setMyGroups] = useState([]);
   // 주간 중복 참여 캐릭터 id Set
   const [weeklyUsedCharIds, setWeeklyUsedCharIds] = useState(new Set());
   // 레이드 정보 수정 모달
@@ -263,11 +266,56 @@ export default function RaidDetailPage() {
           API.getSlots(raidId),
           API.getMyCharacters(fingerprint),
           API.getMembers(raidId),
+          getMyGroups(fingerprint).catch(() => []),   // 그룹 로드 실패해도 계속
         ]);
         setRaid(raidData);
         setSlots(slotsData);
         setMyCharacters(charsData);
         setMembers(membersData);
+
+        // ── 최근 멤버 + 그룹 멤버 자동 로드 ──────────────────
+        const recentReps = loadRecentMembers();
+        const existingReps = new Set(membersData.map(m => m.representative));
+  
+        // 자동 로드 대상: (최근 멤버 + 그룹 멤버) 중 아직 없는 원정대
+        const toAutoLoad = [
+          ...recentReps.filter(r => !existingReps.has(r)),
+          ...groupMemberOrder.filter(r => !existingReps.has(r) && !recentReps.includes(r)),
+        ];
+        const autoLoaded = new Set();
+        for (const rep of toAutoLoad) {
+          try {
+            await API.addMember(raidId, rep, fingerprint);
+            autoLoaded.add(rep);
+          } catch {}
+        }
+  
+        // 최신 멤버 목록 재조회
+        let finalMembers = membersData;
+        if (autoLoaded.size > 0) {
+          finalMembers = await API.getMembers(raidId);
+          setAutoLoadedReps(autoLoaded);
+        }
+
+        // ── 멤버 표시 순서 정렬 ────────────────────────────────
+        // 1. 최근 이용한 원정대 (recentReps 순)
+        // 2. 그룹 멤버 (groupMemberOrder 순)
+        // 3. 나머지
+        const sortedMembers = [...finalMembers].sort((a, b) => {
+          const aRecent = recentReps.indexOf(a.representative);
+          const bRecent = recentReps.indexOf(b.representative);
+          const aGroup  = groupMemberOrder.indexOf(a.representative);
+          const bGroup  = groupMemberOrder.indexOf(b.representative);
+  
+          if (aRecent !== -1 && bRecent !== -1) return aRecent - bRecent;
+          if (aRecent !== -1) return -1;
+          if (bRecent !== -1) return 1;
+          if (aGroup !== -1 && bGroup !== -1) return aGroup - bGroup;
+          if (aGroup !== -1) return -1;
+          if (bGroup !== -1) return 1;
+          return 0;
+        });
+        setMembers(sortedMembers);
 
         // 주간 중복 참여 슬롯 조회 (같은 raid_id 종류의 다른 인스턴스에 배치된 캐릭터)
         try {
@@ -280,24 +328,6 @@ export default function RaidDetailPage() {
           );
           setWeeklyUsedCharIds(usedIds);
         } catch {}
-
-        /* ── 최근 멤버 자동 로드 ─────────────────── */
-        const recentReps = loadRecentMembers();
-        const existingReps = new Set(membersData.map((m) => m.representative));
-        const toAutoLoad = recentReps.filter((rep) => !existingReps.has(rep));
-        const autoLoaded = new Set();
-        for (const rep of toAutoLoad) {
-          try {
-            await API.addMember(raidId, rep, fingerprint);
-            autoLoaded.add(rep);
-          } catch {}
-        }
-        if (autoLoaded.size > 0) {
-          const refreshed = await API.getMembers(raidId);
-          setMembers(refreshed);
-          setAutoLoadedReps(autoLoaded);
-        }
-      } catch (e) {
         setError(e.message);
       } finally {
         setLoading(false);
@@ -533,6 +563,12 @@ export default function RaidDetailPage() {
   const parties = buildPartyStructure(raid.max_slots);
   const diffColor = DIFF_COLORS[raid.difficulty] || "#94a3b8";
 
+  const getGroupNamesForMember = (representative) => {
+    return myGroups
+      .filter(g => g.members.some(m => m.representative === representative))
+      .map(g => g.name);
+  };
+   
   return (
     <>
       <style>{`
@@ -762,18 +798,25 @@ export default function RaidDetailPage() {
               </div>
 
               {/* 멤버별 원정대 컬럼 */}
-              {members.map((member) => (
-                <div key={member.user_id} style={styles.charColumn}>
-                  <div style={styles.charColumnHeader}>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
-                      <div style={styles.charGroupLabel}>{member.representative}</div>
-                      {/* 최근 이용한 원정대 배지 — 배지 없어도 높이 통일 */}
-                      {autoLoadedReps.has(member.representative) ? (
-                        <span style={styles.autoLoadedBadge}>최근 이용한 원정대</span>
-                      ) : (
-                        <span style={{ display: "block", height: 16 }} />
-                      )}
-                    </div>
+              {members.map((member) => {
+                const groupNames = getGroupNamesForMember(member.representative);
+                const isRecent   = autoLoadedReps.has(member.representative);
+                return (
+                  <div key={member.user_id} style={styles.charColumn}>
+                    <div style={styles.charColumnHeader}>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
+                        <div style={styles.charGroupLabel}>{member.representative}</div>
+                        {/* 배지 영역: 최근 이용 + 그룹 이름 (여러 개 가능) */}
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 3, minHeight: 16 }}>
+                          {isRecent && (
+                            <span style={styles.autoLoadedBadge}>최근 이용</span>
+                          )}
+                          {groupNames.map(name => (
+                            <span key={name} style={styles.groupNameBadge}>{name}</span>
+                          ))}
+                        </div>
+                      </div>
+
                     <div
                       style={styles.removeMemberBtn}
                       onClick={() => handleRemoveMember(member.user_id)}
@@ -828,7 +871,8 @@ export default function RaidDetailPage() {
                     })
                   )}
                 </div>
-              ))}
+              )
+            })}
             </div>
               <div
                 style={styles.scrollBtn("right")}
@@ -1507,5 +1551,18 @@ const styles = {
     animation: "toast 2.5s ease forwards",
     zIndex: 100,
     whiteSpace: "nowrap",
+  },
+  // 그룹 이름 뱃지
+  groupNameBadge: {
+    display: "inline-block",
+    fontSize: 9,
+    fontWeight: 700,
+    color: "#818cf8",                          // indigo-400
+    background: "rgba(129,140,248,0.12)",
+    border: "1px solid rgba(129,140,248,0.25)",
+    borderRadius: 4,
+    padding: "1px 5px",
+    letterSpacing: "0.03em",
+    marginTop: 2,
   },
 };

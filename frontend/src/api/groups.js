@@ -4,9 +4,9 @@ import client from './client'
 export const getMyGroups = (fingerprint) =>
   client.get(`/api/groups/${fingerprint}`).then(r => r.data)
 
-// 그룹 생성 (자동 이름: 그룹1, 그룹2, ...)
-export const createGroup = (fingerprint) =>
-  client.post('/api/groups/', { fingerprint }).then(r => r.data)
+// 그룹 생성
+export const createGroup = (fingerprint, name = null ) =>
+  client.post('/api/groups/', { fingerprint, name }).then(r => r.data)
 
 // 그룹 이름 수정
 export const updateGroupName = (groupId, name) =>

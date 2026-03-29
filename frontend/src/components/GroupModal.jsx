@@ -1,44 +1,51 @@
 import { useState, useRef, useEffect } from 'react'
-import { updateGroupName, addGroupMember, removeGroupMember, deleteGroup } from '../api/groups'
+import { updateGroupName, addGroupMember, removeGroupMember, deleteGroup, reorderGroupMembers } from '../api/groups'
 
 /* ───────────────────────────────────────────────────────────
-   GroupModal
+   GroupModal — 그룹 상세/편집 모달
    props:
-     group        – { id, name, members: [{member_row_id, user_id, representative}] }
-     onClose      – 닫기 콜백
-     onUpdated    – 서버 응답 최신 group 데이터로 로컬 상태 갱신
-     onDeleted    – 그룹 삭제 후 콜백
+     group     – { id, name, members: [{member_row_id, user_id, representative, sort_order}] }
+     onClose   – 닫기
+     onUpdated – 최신 group으로 로컬 상태 갱신
+     onDeleted – 삭제 후 콜백
 ─────────────────────────────────────────────────────────── */
 export default function GroupModal({ group, onClose, onUpdated, onDeleted }) {
-  const [editingName, setEditingName] = useState(false)
-  const [nameInput, setNameInput]     = useState(group.name)
-  const [nameSaving, setNameSaving]   = useState(false)
+  const [editingName, setEditingName]     = useState(false)
+  const [nameInput, setNameInput]         = useState(group.name)
+  const [nameSaving, setNameSaving]       = useState(false)
 
-  const [addInput, setAddInput]     = useState('')
-  const [addError, setAddError]     = useState('')
-  const [addLoading, setAddLoading] = useState(false)
+  const [addInput, setAddInput]           = useState('')
+  const [addError, setAddError]           = useState('')
+  const [addLoading, setAddLoading]       = useState(false)
 
-  const [removingId, setRemovingId] = useState(null)
-  const [deleting, setDeleting]     = useState(false)
+  const [removingId, setRemovingId]       = useState(null)
+  const [deleting, setDeleting]           = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
 
+  // 드래그 순서 변경용
+  const [localMembers, setLocalMembers]   = useState(group.members)
+  const dragIdx   = useRef(null)
+  const dragOver  = useRef(null)
+  const [reordering, setReordering]       = useState(false)
+
   const nameRef = useRef(null)
+  useEffect(() => { if (editingName) nameRef.current?.focus() }, [editingName])
+  // group.members가 외부에서 갱신되면 로컬 목록도 동기화
+  useEffect(() => { setLocalMembers(group.members) }, [group.members])
 
-  useEffect(() => {
-    if (editingName) nameRef.current?.focus()
-  }, [editingName])
-
+  /* ── 이름 저장 ───────────────────────────────── */
   const handleSaveName = async () => {
     const trimmed = nameInput.trim()
     if (!trimmed || trimmed === group.name) { setEditingName(false); return }
     setNameSaving(true)
     try {
       await updateGroupName(group.id, trimmed)
-      onUpdated({ ...group, name: trimmed })
+      onUpdated({ ...group, name: trimmed, members: localMembers })
     } catch { setNameInput(group.name) }
     finally { setNameSaving(false); setEditingName(false) }
   }
 
+  /* ── 멤버 추가 ───────────────────────────────── */
   const handleAddMember = async () => {
     const rep = addInput.trim()
     if (!rep) return
@@ -53,15 +60,46 @@ export default function GroupModal({ group, onClose, onUpdated, onDeleted }) {
     } finally { setAddLoading(false) }
   }
 
+  /* ── 멤버 제거 ───────────────────────────────── */
   const handleRemoveMember = async (memberRowId) => {
     setRemovingId(memberRowId)
     try {
       await removeGroupMember(group.id, memberRowId)
-      onUpdated({ ...group, members: group.members.filter(m => m.member_row_id !== memberRowId) })
+      const next = localMembers.filter(m => m.member_row_id !== memberRowId)
+      onUpdated({ ...group, members: next })
     } catch {}
     finally { setRemovingId(null) }
   }
 
+  /* ── 드래그 핸들러 (순서 변경) ───────────────── */
+  const handleDragStart = (idx) => { dragIdx.current = idx }
+  const handleDragOver  = (e, idx) => { e.preventDefault(); dragOver.current = idx }
+  const handleDrop      = async () => {
+    const from = dragIdx.current
+    const to   = dragOver.current
+    if (from === null || to === null || from === to) return
+
+    const reordered = [...localMembers]
+    const [moved] = reordered.splice(from, 1)
+    reordered.splice(to, 0, moved)
+
+    // 낙관적 업데이트 먼저
+    setLocalMembers(reordered)
+    dragIdx.current = null
+    dragOver.current = null
+
+    // 서버 동기화
+    setReordering(true)
+    try {
+      const updated = await reorderGroupMembers(group.id, reordered.map(m => m.member_row_id))
+      onUpdated(updated)
+    } catch {
+      setLocalMembers(group.members) // 실패 시 복원
+    } finally { setReordering(false) }
+  }
+  const handleDragEnd = () => { dragIdx.current = null; dragOver.current = null }
+
+  /* ── 그룹 삭제 ───────────────────────────────── */
   const handleDelete = async () => {
     setDeleting(true)
     try {
@@ -73,28 +111,16 @@ export default function GroupModal({ group, onClose, onUpdated, onDeleted }) {
 
   return (
     <>
-      {/* raid-scroll과 동일한 다크 스크롤바 스타일 */}
       <style>{`
-        .group-modal-scroll::-webkit-scrollbar { width: 3px; }
-        .group-modal-scroll::-webkit-scrollbar-track { background: transparent; }
-        .group-modal-scroll::-webkit-scrollbar-thumb {
-          background: rgba(75, 85, 99, 0.45);
-          border-radius: 4px;
-        }
-        .group-modal-scroll::-webkit-scrollbar-thumb:hover {
-          background: rgba(107, 114, 128, 0.65);
-        }
+        .gm-scroll::-webkit-scrollbar { width: 3px; }
+        .gm-scroll::-webkit-scrollbar-track { background: transparent; }
+        .gm-scroll::-webkit-scrollbar-thumb { background: rgba(75,85,99,0.45); border-radius: 4px; }
+        .gm-scroll::-webkit-scrollbar-thumb:hover { background: rgba(107,114,128,0.65); }
       `}</style>
 
-      <div
-        className="fixed inset-0 z-50 flex items-center justify-center"
-        style={{ background: 'rgba(0,0,0,0.65)' }}
-        onClick={onClose}
-      >
-        <div
-          className="relative w-full max-w-md mx-4 bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl overflow-hidden"
-          onClick={e => e.stopPropagation()}
-        >
+      <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.65)' }} onClick={onClose}>
+        <div className="relative w-full max-w-md mx-4 bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+
           {/* 헤더 */}
           <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800">
             {editingName ? (
@@ -103,85 +129,101 @@ export default function GroupModal({ group, onClose, onUpdated, onDeleted }) {
                   ref={nameRef}
                   value={nameInput}
                   onChange={e => setNameInput(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') handleSaveName()
-                    if (e.key === 'Escape') { setEditingName(false); setNameInput(group.name) }
-                  }}
+                  onKeyDown={e => { if (e.key === 'Enter') handleSaveName(); if (e.key === 'Escape') { setEditingName(false); setNameInput(group.name) } }}
                   className="flex-1 min-w-0 bg-gray-800 border border-gray-600 rounded-lg px-3 py-1.5 text-sm text-white outline-none focus:border-blue-500"
                   maxLength={30}
                 />
-                <button
-                  onClick={handleSaveName}
-                  disabled={nameSaving}
-                  className="text-xs px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors disabled:opacity-50"
-                >
+                <button onClick={handleSaveName} disabled={nameSaving} className="text-xs px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors disabled:opacity-50">
                   {nameSaving ? '저장 중…' : '저장'}
                 </button>
-                <button
-                  onClick={() => { setEditingName(false); setNameInput(group.name) }}
-                  className="text-xs px-2 py-1.5 text-gray-400 hover:text-gray-200 transition-colors"
-                >
-                  취소
-                </button>
+                <button onClick={() => { setEditingName(false); setNameInput(group.name) }} className="text-xs px-2 py-1.5 text-gray-400 hover:text-gray-200 transition-colors">취소</button>
               </div>
             ) : (
               <div className="flex items-center gap-2 min-w-0">
                 <span className="text-base font-semibold text-white truncate">{group.name}</span>
-                <button
-                  onClick={() => setEditingName(true)}
-                  className="flex-shrink-0 text-gray-500 hover:text-gray-300 transition-colors"
-                  title="이름 편집"
-                >
+                <button onClick={() => setEditingName(true)} className="flex-shrink-0 text-gray-500 hover:text-gray-300 transition-colors" title="이름 편집">
                   <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
                     <path d="M11.013 1.427a1.75 1.75 0 012.474 0l1.086 1.086a1.75 1.75 0 010 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 01-.927-.928l.929-3.25c.081-.286.235-.547.445-.758l8.61-8.61zm1.414 1.06a.25.25 0 00-.354 0L10.811 3.75l1.439 1.44 1.263-1.263a.25.25 0 000-.354l-1.086-1.086zM11.189 6.25L9.75 4.81 3.28 11.28a.25.25 0 00-.064.108l-.558 1.953 1.953-.558a.25.25 0 00.108-.064L11.19 6.25z"/>
                   </svg>
                 </button>
               </div>
             )}
-
-            {/* 닫기 버튼 — 삭제와 물리적으로 분리(실수 클릭 방지) */}
-            <button
-              onClick={onClose}
-              className="flex-shrink-0 ml-3 text-gray-500 hover:text-gray-200 transition-colors"
-            >
+            <button onClick={onClose} className="flex-shrink-0 ml-3 text-gray-500 hover:text-gray-200 transition-colors">
               <svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor">
                 <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd"/>
               </svg>
             </button>
           </div>
 
-          {/* 멤버 목록 */}
+          {/* 바디 */}
           <div className="px-5 py-4">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">원정대 멤버</span>
-              <span className="text-xs text-gray-500">{group.members.length}개</span>
+
+            {/* 원정대 추가 입력 (멤버 목록 위) */}
+            <div className="mb-4">
+              <div className="flex gap-2">
+                <input
+                  value={addInput}
+                  onChange={e => { setAddInput(e.target.value); setAddError('') }}
+                  onKeyDown={e => e.key === 'Enter' && handleAddMember()}
+                  placeholder="대표 캐릭터명 입력"
+                  className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 outline-none focus:border-blue-500 transition-colors"
+                />
+                <button
+                  onClick={handleAddMember}
+                  disabled={addLoading || !addInput.trim()}
+                  className="text-xs px-3 py-2 text-gray-400 border border-gray-700 rounded-lg hover:bg-gray-800 hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
+                >
+                  {addLoading ? '추가 중…' : '+ 추가'}
+                </button>
+              </div>
+              {addError && <p className="mt-1.5 text-xs text-red-400">{addError}</p>}
             </div>
 
-            <div
-              className="group-modal-scroll flex flex-col gap-2 mb-4 overflow-y-auto pr-0.5"
-              style={{ maxHeight: '192px' }}
-            >
-              {group.members.length === 0 ? (
+            {/* 멤버 목록 헤더 */}
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">원정대 멤버</span>
+              <div className="flex items-center gap-2">
+                {reordering && <span className="text-xs text-gray-500">저장 중…</span>}
+                <span className="text-xs text-gray-500">{localMembers.length}개</span>
+              </div>
+            </div>
+
+            {/* 멤버 카드 (드래그 순서 변경) */}
+            <div className="gm-scroll flex flex-col gap-2 overflow-y-auto pr-0.5" style={{ maxHeight: '208px' }}>
+              {localMembers.length === 0 ? (
                 <p className="text-sm text-gray-600 text-center py-4">
                   아직 멤버가 없어요.<br/>
-                  <span className="text-xs">아래에서 원정대를 추가해보세요.</span>
+                  <span className="text-xs">위에서 원정대를 추가해보세요.</span>
                 </p>
               ) : (
-                group.members.map(m => (
+                localMembers.map((m, idx) => (
                   <div
                     key={m.member_row_id}
-                    className="flex items-center justify-between bg-gray-800 rounded-lg px-3 py-2"
+                    draggable
+                    onDragStart={() => handleDragStart(idx)}
+                    onDragOver={(e) => handleDragOver(e, idx)}
+                    onDrop={handleDrop}
+                    onDragEnd={handleDragEnd}
+                    className="flex items-center justify-between bg-gray-800 rounded-lg px-2 py-2 cursor-default group/card"
                   >
-                    <div className="flex items-center gap-2">
+                    {/* 드래그 핸들 (레이드 UI와 동일한 세 줄 아이콘) */}
+                    <div className="flex-shrink-0 flex flex-col gap-[3px] px-1 py-1 opacity-30 group-hover/card:opacity-70 transition-opacity cursor-grab active:cursor-grabbing">
+                      <span className="block w-[14px] h-[1.5px] bg-gray-400 rounded"/>
+                      <span className="block w-[14px] h-[1.5px] bg-gray-400 rounded"/>
+                      <span className="block w-[14px] h-[1.5px] bg-gray-400 rounded"/>
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-1 min-w-0 ml-1">
                       <span className="w-6 h-6 rounded-full bg-gray-700 flex items-center justify-center text-xs text-gray-400 flex-shrink-0">
                         {(m.representative || '?')[0]}
                       </span>
-                      <span className="text-sm text-gray-200">{m.representative}</span>
+                      <span className="text-sm text-gray-200 truncate">{m.representative}</span>
                     </div>
+
                     <button
                       onClick={() => handleRemoveMember(m.member_row_id)}
                       disabled={removingId === m.member_row_id}
-                      className="text-gray-600 hover:text-red-400 transition-colors disabled:opacity-40"
+                      className="flex-shrink-0 text-gray-600 hover:text-red-400 transition-colors disabled:opacity-40 ml-2"
                     >
                       {removingId === m.member_row_id ? (
                         <svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -198,55 +240,20 @@ export default function GroupModal({ group, onClose, onUpdated, onDeleted }) {
                 ))
               )}
             </div>
-
-            {/* 멤버 추가 — "+ 추가" 스타일을 "레이드 생성" 버튼과 통일 */}
-            <div className="flex gap-2">
-              <input
-                value={addInput}
-                onChange={e => { setAddInput(e.target.value); setAddError('') }}
-                onKeyDown={e => e.key === 'Enter' && handleAddMember()}
-                placeholder="대표 캐릭터명 입력"
-                className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 outline-none focus:border-blue-500 transition-colors"
-              />
-              <button
-                onClick={handleAddMember}
-                disabled={addLoading || !addInput.trim()}
-                className="text-xs px-3 py-2 text-gray-400 border border-gray-700 rounded-lg hover:bg-gray-800 hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
-              >
-                {addLoading ? '추가 중…' : '+ 추가'}
-              </button>
-            </div>
-            {addError && (
-              <p className="mt-1.5 text-xs text-red-400">{addError}</p>
-            )}
           </div>
 
-          {/* 푸터 — 삭제 버튼은 하단 유지 (X 닫기와 공간 분리 → 실수 클릭 방지) */}
+          {/* 푸터 — 삭제 (하단 유지: X 닫기와 분리) */}
           <div className="px-5 py-3 border-t border-gray-800 flex justify-end">
             {confirmDelete ? (
               <div className="flex items-center gap-2">
                 <span className="text-xs text-gray-400">정말 삭제할까요?</span>
-                <button
-                  onClick={handleDelete}
-                  disabled={deleting}
-                  className="text-xs px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white rounded-lg transition-colors disabled:opacity-50"
-                >
+                <button onClick={handleDelete} disabled={deleting} className="text-xs px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white rounded-lg transition-colors disabled:opacity-50">
                   {deleting ? '삭제 중…' : '삭제'}
                 </button>
-                <button
-                  onClick={() => setConfirmDelete(false)}
-                  className="text-xs px-3 py-1.5 text-gray-400 hover:text-gray-200 border border-gray-700 rounded-lg transition-colors"
-                >
-                  취소
-                </button>
+                <button onClick={() => setConfirmDelete(false)} className="text-xs px-3 py-1.5 text-gray-400 hover:text-gray-200 border border-gray-700 rounded-lg transition-colors">취소</button>
               </div>
             ) : (
-              <button
-                onClick={() => setConfirmDelete(true)}
-                className="text-xs text-gray-600 hover:text-red-400 transition-colors"
-              >
-                그룹 삭제
-              </button>
+              <button onClick={() => setConfirmDelete(true)} className="text-xs text-gray-600 hover:text-red-400 transition-colors">그룹 삭제</button>
             )}
           </div>
         </div>

@@ -119,25 +119,15 @@ def get_my_groups(fingerprint: str):
 @router.post("/", status_code=201)
 def create_group(payload: GroupCreate):
     user_id = _resolve_user_id(payload.fingerprint)
-
-    # 기존 그룹 수 조회 → 자동 이름 결정
-    existing = (
-        supabase.table("groups")
-        .select("id", count="exact")
-        .eq("user_id", user_id)
-        .execute()
-    )
-    count = existing.count or 0
-    auto_name = f"그룹{count + 1}"
-
-    result = (
-        supabase.table("groups")
-        .insert({"user_id": user_id, "name": auto_name})
-        .execute()
-    )
+    if payload.name and payload.name.strip():
+        group_name = payload.name.strip()
+    else:
+        existing = supabase.table("groups").select("id", count="exact").eq("user_id", user_id).execute()
+        count = existing.count or 0
+        group_name = f"그룹{count + 1}"
+    result = supabase.table("groups").insert({"user_id": user_id, "name": group_name}).execute()
     if not result.data:
         raise HTTPException(status_code=500, detail="그룹 생성에 실패했습니다.")
-
     g = result.data[0]
     g["members"] = []
     return g
