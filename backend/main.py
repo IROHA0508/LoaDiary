@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from app.api import users, characters, raids
 from app.db.supabase_client import check_connection
+from app.api import groups
 
 # 서버 시작시 DB연결 확인 추가
 @asynccontextmanager
@@ -36,6 +37,7 @@ app.add_middleware(
 app.include_router(users.router, prefix="/api/users", tags = ["users"])
 app.include_router(characters.router, prefix="/api/characters", tags = ["characters"])
 app.include_router(raids.router, prefix="/api/raids", tags = ["raids"])
+app.include_router(groups.router, prefix="/api/groups", tags=["groups"])
 
 @app.get("/")
 def root():

@@ -5,6 +5,8 @@ import { getCharacters, syncAll } from '../api/characters'
 import { getMyRaids, getJoinedRaids, deleteRaid, getSlots } from '../api/raids'
 import { useUser } from '../hooks/useUser'
 import { supabase } from '../lib/supabase'
+import GroupModal from '../components/GroupModal'
+import { getMyGroups, createGroup } from '../api/groups'
 
 /* ─────────────────────────────────────────────
    레이드 섹션 레이아웃 상수
@@ -165,6 +167,12 @@ export default function MainPage() {
   // 캐릭터 검색 (헤더 검색창 연결용)
   const [charSearch, setCharSearch] = useState('')
 
+  // 그룹 관련 컴포넌트
+  const [groups, setGroups]               = useState([])
+  const [groupLoading, setGroupLoading]   = useState(true)
+  const [groupCreating, setGroupCreating] = useState(false)
+  const [activeGroup, setActiveGroup]     = useState(null)   // 모달용
+
   const handleCharSearch = (e) => {
     e.preventDefault()
     const name = charSearch.trim()
@@ -264,6 +272,16 @@ export default function MainPage() {
       setRaidToDelete(null)
     },
   })
+
+  // 그룹 관련 useEffect
+  useEffect(() => {
+    if (!fingerprint) return
+    setGroupLoading(true)
+    getMyGroups(fingerprint)
+      .then(setGroups)
+      .catch(() => {})
+      .finally(() => setGroupLoading(false))
+  }, [fingerprint])
 
   /* ── Supabase Realtime 구독 ──────────────── */
   // raid_members, raid_slots, raids 테이블 변경 시 즉시 갱신
@@ -382,6 +400,16 @@ export default function MainPage() {
     }
   }
 
+  // 그룹 생성 핸들러
+  const handleCreateGroup = async () => {
+    if (groupCreating) return
+    setGroupCreating(true)
+    try {
+      const newGroup = await createGroup(fingerprint)
+      setGroups(prev => [...prev, newGroup])
+    } catch {}
+    finally { setGroupCreating(false) }
+  }
   /* ── 내가 만든 레이드 여부 ────────────────── */
   const isMyRaid = (raidId) => myRaids.some(r => r.id === raidId)
 
@@ -419,6 +447,61 @@ export default function MainPage() {
 
         {/* ── 메인 영역 ──────────────────────── */}
         <main className="flex-1 min-w-0 flex flex-col gap-4">
+
+          {/* ━━━━━ 내 그룹 섹션 ━━━━━ */}
+          <section className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+            {/* 헤더 */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-medium text-gray-300">내 그룹</span>
+                {groups.length > 0 && (
+                  <span className="text-xs text-blue-400/80 bg-blue-400/10 border border-blue-400/20 px-2 py-0.5 rounded-full">
+                    {groups.length}개
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={handleCreateGroup}
+                disabled={groupCreating}
+                className="text-xs text-gray-400 px-3 py-1 border border-gray-700 rounded-md hover:bg-gray-800 hover:text-white transition-colors disabled:opacity-40"
+              >
+                {groupCreating ? '생성 중…' : '+ 그룹 생성'}
+              </button>
+            </div>
+          
+            {/* 그룹 슬롯 목록 */}
+            {groupLoading ? (
+              <div className="px-4 py-4 text-sm text-gray-500">불러오는 중...</div>
+            ) : groups.length === 0 ? (
+              <div className="px-4 py-5 text-sm text-gray-600 text-center">
+                그룹이 없어요.{' '}
+                <button 
+                  onClick={handleCreateGroup} 
+                  className="mt-3 text-sm text-blue-400 hover:text-blue-300"
+                >
+                  첫 그룹 만들기 →
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-3">
+                {groups.map(group => (
+                  <button
+                    key={group.id}
+                    onClick={() => setActiveGroup(group)}
+                    className="flex flex-col items-start gap-1 bg-gray-800 hover:bg-gray-750 border border-gray-700 hover:border-gray-600 rounded-lg px-3 py-2.5 transition-all text-left group"
+                    style={{ '--tw-bg-opacity': 1 }}
+                  >
+                    <span className="text-sm font-medium text-gray-200 truncate w-full group-hover:text-white transition-colors">
+                      {group.name}
+                    </span>
+                    <span className="text-xs text-gray-500">
+                      원정대 {group.members.length}개
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
 
           {/* 내 레이드 섹션 */}
           <section className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
@@ -837,7 +920,7 @@ export default function MainPage() {
               {isMyRaid(raidToDelete.id) ? '레이드 삭제' : '레이드 나가기'}
             </h3>
             <p className="text-sm text-gray-400">
-              <span className="text-white font-medium">{raidToDelete.raid_name}</span>
+              <span className="text-white font-medium">{raidToDelete.raid_name} / {raidToDelete.difficulty}</span>
               {isMyRaid(raidToDelete.id) ? (
                 <> 레이드를 삭제할까요?<br />이 작업은 되돌릴 수 없어요.</>
               ) : (
@@ -861,6 +944,21 @@ export default function MainPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {activeGroup && (
+        <GroupModal
+          group={activeGroup}
+          onClose={() => setActiveGroup(null)}
+          onUpdated={(updated) => {
+            setGroups(prev => prev.map(g => g.id === updated.id ? updated : g))
+            setActiveGroup(updated)
+          }}
+          onDeleted={(deletedId) => {
+            setGroups(prev => prev.filter(g => g.id !== deletedId))
+            setActiveGroup(null)
+          }}
+        />
       )}
     </div>
   )
