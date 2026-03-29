@@ -262,22 +262,22 @@ export default function RaidNewPage() {
   const handleSubmit = async () => {
     setIsSubmitting(true);
     try {
-      const res = await fetch("/api/raids/", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          raid_id: form.raidId,
-          raid_name: selectedRaid?.name,
-          difficulty: form.difficulty,
-          max_slots: form.max_slots,
-          created_by: fingerprint,
-        }),
+      const data = await createRaid({
+        raid_id: form.raidId,
+        raid_name: selectedRaid?.name,
+        difficulty: form.difficulty,
+        max_slots: form.max_slots,
+        created_by: fingerprint,
       });
-      if (!res.ok) throw new Error("레이드 생성 실패");
-      const data = await res.json();
+
       navigate(`/raids/${data.id}`);
     } catch (e) {
-      setSubmitResult({ ok: false, error: e.message });
+      const message =
+        e.response?.data?.detail ||
+        e.message ||
+        "레이드 생성 실패";
+
+      setSubmitResult({ ok: false, error: message });
     } finally {
       setIsSubmitting(false);
     }
