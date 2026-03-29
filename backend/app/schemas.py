@@ -11,11 +11,11 @@ class UserCreate(BaseModel):
 
 class UserResponse(BaseModel):
   id: str
-  fingerprint: str
+  fingerprint: Optional[str] = None   # 임시 유저(fingerprint=None)도 허용
   representative: str
   created_at: datetime
 
-  model_config = {"from_attributes" : True}
+  model_config = {"from_attributes": True}
 
 # ──────────────────────────────────────────
 # Character
@@ -44,12 +44,8 @@ class CharacterResponse(BaseModel):
   item_level: Optional[float]
   combat_power: Optional[float]
   server: str
-  # 서포터 빌드 여부 — 각인(Effects)에서 서포터 직업 각인 감지 시 True
-  # DB 컬럼 없는 구버전 데이터는 None으로 올 수 있으므로 Optional 처리
   is_support: Optional[bool] = False
   updated_at: datetime
- 
-  model_config = {"from_attributes": True}
 
   model_config = {"from_attributes": True}
 
@@ -59,17 +55,15 @@ class CharacterResponse(BaseModel):
 # ──────────────────────────────────────────
 
 class RaidCreate(BaseModel):
-  # group_code: str
   raid_id: str
   raid_name: str
   difficulty: str
-  max_slots: int = Field(ge=1, le=16)   # 슬롯 수를 1~16사이로 제한하는 유효성검사
+  max_slots: int = Field(ge=1, le=16)
   created_by: str
 
 
 class RaidResponse(BaseModel):
   id: str
-  # group_code: str
   raid_id: str
   raid_name: str
   difficulty: str
@@ -95,7 +89,7 @@ class RaidSlotResponse(BaseModel):
   raid_id: str
   character_id: str
   character_name: Optional[str] = None
-  class_name: Optional[str] = None       # 직업명 (시너지 계산용)
+  class_name: Optional[str] = None
   is_support: Optional[bool] = None
   slot_order: int
   role: Optional[str]
@@ -106,33 +100,32 @@ class RaidSlotResponse(BaseModel):
 # ──────────────────────────────────────────
 # RaidMember
 # ──────────────────────────────────────────
- 
+
 class RaidMemberCreate(BaseModel):
-  representative: str                   # 추가할 유저의 대표 캐릭터명
- 
- 
+  representative: str
+
+
 class RaidMemberResponse(BaseModel):
   id: str
   raid_id: str
   user_id: str
   added_by: str
   created_at: datetime
- 
+
   model_config = {"from_attributes": True}
- 
- 
-# 멤버 목록 조회 시 유저 정보 + 캐릭터 목록을 함께 반환
+
+
 class RaidMemberWithCharacters(BaseModel):
   user_id: str
-  representative: str                   # 대표 캐릭터명
-  characters: List[CharacterResponse]   # 해당 유저의 원정대 전체 캐릭터
- 
- 
+  representative: str
+  characters: List[CharacterResponse]
+
+
 # ──────────────────────────────────────────
 # 주간 참여 완료 슬롯
 # ──────────────────────────────────────────
 class WeeklyUsedSlotResponse(BaseModel):
-  raid_instance_id: str   # 어느 레이드 인스턴스에 배치됐는지
-  character_id: str       # 배치된 캐릭터 id
- 
+  raid_instance_id: str
+  character_id: str
+
   model_config = {"from_attributes": True}

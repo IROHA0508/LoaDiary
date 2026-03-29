@@ -14,22 +14,27 @@ export default function GroupCreateModal({ fingerprint, onClose, onCreated }) {
   const [addLoading, setAddLoading]         = useState(false)
   const [creating, setCreating]             = useState(false)
 
-  /* ── 멤버 추가: API로 원정대 존재 여부 먼저 확인 ─── */
+  /* ── 멤버 추가: LoA API 기반 원정대 검증 (/api/users/resolve) ──
+     - DB exact match가 아닌 LoA API로 실제 캐릭터 존재 여부 확인
+     - HALUNAR 입력 시 → DALUNAR(대표 캐릭터)로 자동 해석해서 표시
+  */
   const handleAddPending = async () => {
     const rep = addInput.trim()
     if (!rep) return
-    if (pendingMembers.some(m => m.representative === rep)) {
-      setAddError('이미 추가된 멤버입니다.')
-      return
-    }
     setAddLoading(true)
     setAddError('')
     try {
-      await client.get(`/api/users/search/by-representative?representative=${encodeURIComponent(rep)}`)
-      setPendingMembers(prev => [...prev, { representative: rep }])
+      const res = await client.get(`/api/users/resolve?character_name=${encodeURIComponent(rep)}`)
+      const canonical = res.data.representative  // 실제 원정대 대표 캐릭터명
+      if (pendingMembers.some(m => m.representative === canonical)) {
+        setAddError('이미 추가된 멤버입니다.')
+        return
+      }
+      setPendingMembers(prev => [...prev, { representative: canonical }])
       setAddInput('')
-    } catch {
-      setAddError('해당 대표 캐릭터를 찾을 수 없어요. 캐릭터명을 다시 확인해주세요.')
+    } catch (err) {
+      const msg = err?.response?.data?.detail || '해당 캐릭터를 찾을 수 없어요. 캐릭터명을 다시 확인해주세요.'
+      setAddError(msg)
     } finally {
       setAddLoading(false)
     }
@@ -45,11 +50,15 @@ export default function GroupCreateModal({ fingerprint, onClose, onCreated }) {
     setCreating(true)
     setAddError('')
     try {
-      const newGroup = await createGroup(fingerprint, groupName.trim() || null)
+      let latestGroup = await createGroup(fingerprint, groupName.trim() || null)
+      // 멤버 추가 — 각 응답이 최신 그룹 전체를 반환하므로 마지막 응답을 사용
       for (const m of pendingMembers) {
-        try { await addGroupMember(newGroup.id, m.representative) } catch {}
+        try {
+          const updated = await addGroupMember(latestGroup.id, m.representative)
+          if (updated) latestGroup = updated  // 최신 상태로 계속 갱신
+        } catch {}
       }
-      onCreated(newGroup)
+      onCreated(latestGroup)  // 멤버가 모두 반영된 최신 그룹 전달
       onClose()
     } catch {
       setAddError('그룹 생성에 실패했습니다.')
@@ -134,7 +143,7 @@ export default function GroupCreateModal({ fingerprint, onClose, onCreated }) {
             <div>
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">그룹 멤버</span>
-                <span className="text-xs text-gray-500">{pendingMembers.length}개</span>
+                <span className="text-xs text-gray-500">{pendingMembers.length}명</span>
               </div>
               <div className="gcm-scroll flex flex-col gap-2 overflow-y-auto pr-0.5" style={{ minHeight: '208px', maxHeight: '208px' }}>
                 {pendingMembers.length === 0 ? (

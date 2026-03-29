@@ -10,7 +10,7 @@ from app.schemas import (
   WeeklyUsedSlotResponse,
 )
 from app.db.supabase_client import supabase
-from app.lostark import get_characters, parse_characters
+from app.lostark import get_characters, parse_characters, resolve_or_create_user_by_character_name
 
 # 라우터 생성
 router = APIRouter()
@@ -400,41 +400,9 @@ async def add_member(raid_id: str, payload: RaidMemberCreate, added_by: str):
  
   adder_id = adder_result.data[0]["id"]
  
-  # 2. 대표 캐릭터명으로 추가할 유저 검색
-  target_result = (
-    supabase.table("users")
-    .select("id")
-    .eq("representative", payload.representative)
-    .execute()
-  )
- 
-  if not target_result.data:
-    # 미가입 유저 → fingerprint 없이 임시 유저 생성
-    new_user = (
-      supabase.table("users")
-      .insert({"representative": payload.representative, "fingerprint": None})
-      .execute()
-    )
-    if not new_user.data:
-      raise HTTPException(status_code=500, detail="임시 유저 생성에 실패했습니다.")
-    target_user_id = new_user.data[0]["id"]
-
-    # 로스트아크 API로 캐릭터 자동 동기화
-    raw = await get_characters(payload.representative)
-    if not raw:
-      # 캐릭터를 찾을 수 없으면 임시 유저 롤백 후 에러 반환
-      supabase.table("users").delete().eq("id", target_user_id).execute()
-      raise HTTPException(
-        status_code=404,
-        detail=f"'{payload.representative}' 캐릭터를 찾을 수 없습니다. 캐릭터명을 다시 확인해주세요."
-      )
-    characters = await parse_characters(raw, target_user_id)
-    now = datetime.now(timezone.utc).isoformat()
-    for c in characters:
-      c["updated_at"] = now
-    supabase.table("characters").insert(characters).execute()
-  else:
-    target_user_id = target_result.data[0]["id"]
+#   # 2. LoA API로 캐릭터 검증 + 원정대 식별 (groups.py와 동일 헬퍼 사용)
+  target_user = await resolve_or_create_user_by_character_name(payload.representative)
+  target_user_id = target_user["id"]
  
   # 3. 본인을 추가하려는 경우 차단
   if adder_id == target_user_id:

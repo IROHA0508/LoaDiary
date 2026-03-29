@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional
 from app.db.supabase_client import supabase
+from app.lostark import resolve_or_create_user_by_character_name
 
 router = APIRouter()
 
@@ -14,7 +15,6 @@ def _resolve_user_id(fingerprint: str) -> str:
 
 
 def _build_group_with_members(g: dict) -> dict:
-    """그룹 dict에 members 리스트 붙여서 반환 (sort_order 순)"""
     members_rows = (
         supabase.table("group_members")
         .select("id, user_id, sort_order")
@@ -41,7 +41,6 @@ def _build_group_with_members(g: dict) -> dict:
     return g
 
 
-# ── 스키마 ──────────────────────────────────────────────────
 class GroupCreate(BaseModel):
     fingerprint: str
     name: Optional[str] = None
@@ -60,23 +59,15 @@ class GroupReorder(BaseModel):
     group_ids: List[str]
 
 
-# ── 엔드포인트 ───────────────────────────────────────────────
-
-# 내 그룹 목록 조회 (sort_order 순)
 @router.get("/{fingerprint}")
 def get_my_groups(fingerprint: str):
     user_id = _resolve_user_id(fingerprint)
     groups = (
-        supabase.table("groups")
-        .select("*")
-        .eq("user_id", user_id)
-        .order("sort_order")
-        .execute()
+        supabase.table("groups").select("*").eq("user_id", user_id).order("sort_order").execute()
     ).data or []
     return [_build_group_with_members(g) for g in groups]
 
 
-# 그룹 생성 (이름 직접 지정 or 자동)
 @router.post("/", status_code=201)
 def create_group(payload: GroupCreate):
     user_id = _resolve_user_id(payload.fingerprint)
@@ -87,7 +78,6 @@ def create_group(payload: GroupCreate):
         count = existing.count or 0
         group_name = f"그룹{count + 1}"
 
-    # sort_order = 현재 그룹 수 (마지막에 추가)
     count_result = supabase.table("groups").select("id", count="exact").eq("user_id", user_id).execute()
     sort_order = count_result.count or 0
 
@@ -101,7 +91,6 @@ def create_group(payload: GroupCreate):
     return g
 
 
-# 그룹 이름 수정
 @router.patch("/{group_id}")
 def update_group_name(group_id: str, payload: GroupNameUpdate):
     result = supabase.table("groups").update({"name": payload.name.strip()}).eq("id", group_id).execute()
@@ -110,7 +99,6 @@ def update_group_name(group_id: str, payload: GroupNameUpdate):
     return result.data[0]
 
 
-# 그룹 순서 변경
 @router.patch("/reorder")
 def reorder_groups(payload: GroupReorder):
     user_id = _resolve_user_id(payload.fingerprint)
@@ -119,31 +107,35 @@ def reorder_groups(payload: GroupReorder):
     return {"ok": True}
 
 
-# 그룹 삭제
 @router.delete("/{group_id}", status_code=204)
 def delete_group(group_id: str):
     supabase.table("groups").delete().eq("id", group_id).execute()
 
 
-# 멤버 추가
+# ── 멤버 추가: LoA API로 캐릭터 검증 + 원정대 식별 ──────
 @router.post("/{group_id}/members", status_code=201)
-def add_member(group_id: str, payload: MemberAdd):
-    user_result = (
-        supabase.table("users").select("id").eq("representative", payload.representative.strip()).execute()
-    )
-    if not user_result.data:
-        raise HTTPException(status_code=404, detail="해당 대표 캐릭터를 찾을 수 없어요. 캐릭터명을 다시 확인해주세요.")
+async def add_member(group_id: str, payload: MemberAdd):
+    # 공통 헬퍼 호출:
+    # ① DB exact match → ② LoA API siblings 조회 → ③ 같은 원정대 유저 탐색 → ④ 임시 유저 생성
+    user = await resolve_or_create_user_by_character_name(payload.representative)
+    target_user_id = user["id"]
 
-    target_user_id = user_result.data[0]["id"]
-    existing = supabase.table("group_members").select("id").eq("group_id", group_id).eq("user_id", target_user_id).execute()
+    existing = (
+        supabase.table("group_members").select("id")
+        .eq("group_id", group_id).eq("user_id", target_user_id).execute()
+    )
     if existing.data:
         raise HTTPException(status_code=409, detail="이미 그룹에 포함된 멤버입니다.")
 
-    count_result = supabase.table("group_members").select("id", count="exact").eq("group_id", group_id).execute()
+    count_result = (
+        supabase.table("group_members").select("id", count="exact").eq("group_id", group_id).execute()
+    )
     sort_order = count_result.count or 0
 
     result = supabase.table("group_members").insert({
-        "group_id": group_id, "user_id": target_user_id, "sort_order": sort_order
+        "group_id": group_id,
+        "user_id": target_user_id,
+        "sort_order": sort_order,
     }).execute()
     if not result.data:
         raise HTTPException(status_code=500, detail="멤버 추가에 실패했습니다.")
@@ -152,7 +144,6 @@ def add_member(group_id: str, payload: MemberAdd):
     return _build_group_with_members(g)
 
 
-# 멤버 순서 변경
 @router.patch("/{group_id}/members/reorder")
 def reorder_members(group_id: str, payload: MemberReorder):
     for i, member_row_id in enumerate(payload.member_ids):
@@ -161,7 +152,6 @@ def reorder_members(group_id: str, payload: MemberReorder):
     return _build_group_with_members(g)
 
 
-# 멤버 제거
 @router.delete("/{group_id}/members/{member_row_id}", status_code=204)
 def remove_member(group_id: str, member_row_id: str):
     supabase.table("group_members").delete().eq("id", member_row_id).execute()

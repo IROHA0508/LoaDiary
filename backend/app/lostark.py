@@ -1,14 +1,13 @@
 import os
 import httpx
 from dotenv import load_dotenv
+from datetime import datetime, timezone
 
 load_dotenv()
 
 LOSTARK_API_KEY = os.environ.get("LOSTARK_API_KEY", "")
 BASE_URL = "https://developer-lostark.game.onstove.com"
 
-# ── 서포터 판별용 직업 각인 목록 ──────────────────────
-# 해당 각인이 Effects에 있으면 서포터 빌드로 판정
 SUPPORT_ARKPASSIVE = {"축복의 오라", "해방자", "절실한 구원", "만개"}
 
 def _headers() -> dict:
@@ -51,8 +50,6 @@ async def get_character_profile(character_name: str, client: httpx.AsyncClient) 
   return {}
 
 # ── 아크패시브 조회 — 서포터 빌드 여부 판별 ────────────
-# /armories/characters/{name}/arkpassive 응답:
-# Title 필드가 SUPPORT_ENGRAVINGS에 포함되면 서포터로 판정
 async def get_character_engravings(character_name: str, client: httpx.AsyncClient) -> bool:
   url = f"{BASE_URL}/armories/characters/{character_name}/arkpassive"
   try:
@@ -80,7 +77,6 @@ async def parse_characters(raw: list, user_id: str) -> list:
       combat_power = None
       is_support = False
 
-      # 아이템 레벨이 있는 캐릭터만 프로필·각인 조회
       if item_level is not None:
         profile = await get_character_profile(name, client)
         if profile:
@@ -100,9 +96,72 @@ async def parse_characters(raw: list, user_id: str) -> list:
 
   return result
 
+# ── 캐릭터명으로 유저를 찾거나 생성하는 공통 헬퍼 ────────
+# 동작 순서:
+#   ① DB에서 입력명 exact match (이미 대표 캐릭터로 등록된 경우)
+#   ② 로스트아크 API로 siblings 조회 (유효한 캐릭터인지 검증 + 원정대 목록 획득)
+#      → API 응답 없으면 404 raise (존재하지 않는 캐릭터)
+#   ③ siblings 중 DB에 등록된 대표 캐릭터가 있으면 그 유저 반환
+#   ④ 없으면 임시 유저 생성 + 캐릭터 동기화
+# 반환값: users 테이블 row dict (id, representative, fingerprint, ...)
+async def resolve_or_create_user_by_character_name(character_name: str) -> dict:
+  from fastapi import HTTPException
+  from app.db.supabase_client import supabase
+
+  rep = character_name.strip()
+  if not rep:
+    raise HTTPException(status_code=400, detail="캐릭터명을 입력해주세요.")
+
+  # ① DB exact match
+  direct = supabase.table("users").select("*").eq("representative", rep).execute()
+  if direct.data:
+    return direct.data[0]
+
+  # ② 로스트아크 API로 원정대 캐릭터 목록 조회
+  raw = await get_characters(rep)
+  if not raw:
+    raise HTTPException(
+      status_code=404,
+      detail=f"'{rep}' 캐릭터를 찾을 수 없어요. 캐릭터명을 다시 확인해주세요."
+    )
+
+  sibling_names = [c.get("CharacterName") for c in raw if c.get("CharacterName")]
+
+  # ③ siblings 중 DB에 대표 캐릭터로 등록된 유저 탐색
+  for name in sibling_names:
+    existing = supabase.table("users").select("*").eq("representative", name).execute()
+    if existing.data:
+      return existing.data[0]
+
+  # ④ 없으면 임시 유저 생성
+  # 대표 캐릭터 = 원정대 내 아이템 레벨이 가장 높은 캐릭터
+  def _parse_level_local(s):
+    try: return float(s.replace(",", "")) if s else 0.0
+    except: return 0.0
+
+  best = max(raw, key=lambda c: _parse_level_local(c.get("ItemAvgLevel", "0")))
+  representative_name = best.get("CharacterName") or rep
+  created = supabase.table("users").insert({
+    "representative": representative_name,
+    "fingerprint": None,
+  }).execute()
+  if not created.data:
+    raise HTTPException(status_code=500, detail="유저 생성에 실패했습니다.")
+
+  user = created.data[0]
+
+  # 캐릭터 동기화
+  characters = await parse_characters(raw, user["id"])
+  if characters:
+    now = datetime.now(timezone.utc).isoformat()
+    for c in characters:
+      c["updated_at"] = now
+    supabase.table("characters").insert(characters).execute()
+
+  return user
+
+
 # ── 캐릭터 상세 정보 일괄 조회 (캐릭터 상세 페이지용) ──
-# profiles + equipment + engravings + gems + cards + arkpassive 를
-# 단일 요청으로 가져옴. 응답 구조는 Lostark armory API 스펙을 그대로 반환.
 async def get_armory(character_name: str) -> dict:
   filters = "profiles+equipment+engravings+gems+cards+arkpassive"
   url = f"{BASE_URL}/armories/characters/{character_name}?filters={filters}"
