@@ -18,6 +18,7 @@ const DIFF_COLORS = {
 
 // 백엔드 URL 추가
 const BACKEND_URL = import.meta.env.VITE_API_BASE_URL
+BACKEND_URL = BACKEND_URL.replace(/\/+$/, ""); // 끝 슬래시 제거
 
 /* ─────────────────────────────────────────────
    API 함수
