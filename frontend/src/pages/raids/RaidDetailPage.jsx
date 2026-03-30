@@ -16,20 +16,23 @@ const DIFF_COLORS = {
   "3단계":   "#ef4444",
 };
 
+// 백엔드 URL 추가
+const BACKEND_URL = import.meta.env.VITE_API_BASE_URL
+
 /* ─────────────────────────────────────────────
    API 함수
    ───────────────────────────────────────────── */
 const API = {
   // 레이드 단일 조회
   getRaid: (id) =>
-    fetch(`/api/raids/${id}`).then((r) => {
+    fetch(`${BACKEND_URL}/api/raids/${id}`).then((r) => {
       if (!r.ok) throw new Error("레이드를 찾을 수 없습니다.");
       return r.json();
     }),
 
   // 슬롯 목록 조회
   getSlots: (raidId) =>
-    fetch(`/api/raids/${raidId}/slots`).then((r) => r.json()),
+    fetch(`${BACKEND_URL}/api/raids/${raidId}/slots`).then((r) => r.json()),
 
   // 내 캐릭터 목록 조회
   getMyCharacters: (fingerprint) =>
@@ -37,7 +40,7 @@ const API = {
 
   // 슬롯에 캐릭터 배치
   addSlot: (raidId, payload) =>
-    fetch(`/api/raids/${raidId}/slots`, {
+    fetch(`${BACKEND_URL}/api/raids/${raidId}/slots`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -48,7 +51,7 @@ const API = {
 
   // 슬롯에서 캐릭터 제거
   removeSlot: (slotId) =>
-    fetch(`/api/raids/slots/${slotId}`, { method: "DELETE" }),
+    fetch(`${BACKEND_URL}/api/raids/slots/${slotId}`, { method: "DELETE" }),
 
   // 멤버 목록 조회 (유저 정보 + 원정대 캐릭터)
   getMembers: (raidId) =>
@@ -56,7 +59,7 @@ const API = {
 
   // 멤버 등록 (대표 캐릭터명으로)
   addMember: (raidId, representative, fingerprint) =>
-    fetch(`/api/raids/${raidId}/members?added_by=${fingerprint}`, {
+    fetch(`${BACKEND_URL}/api/raids/${raidId}/members?added_by=${fingerprint}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ representative }),
@@ -67,7 +70,7 @@ const API = {
 
   // 레이드 정보 수정
   updateRaid: (raidId, payload) =>
-    fetch(`/api/raids/${raidId}`, {
+    fetch(`${BACKEND_URL}/api/raids/${raidId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -78,7 +81,7 @@ const API = {
 
   // 멤버 제거
   removeMember: (raidId, userId) =>
-    fetch(`/api/raids/${raidId}/members/${userId}`, { method: "DELETE" }),
+    fetch(`${BACKEND_URL}/api/raids/${raidId}/members/${userId}`, { method: "DELETE" }),
 
   // 주간 중복 참여 슬롯 조회
   getWeeklyUsedSlots: (raidType, weekStart) =>

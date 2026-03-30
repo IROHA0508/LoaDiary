@@ -5,11 +5,14 @@ import { getCharacters } from '../api/characters'
 import { getMyRaids, getJoinedRaids, getSlots } from '../api/raids'
 import { useUser } from '../hooks/useUser'
 
+// 백엔드 URL 추가
+const BACKEND_URL = import.meta.env.VITE_API_BASE_URL
+
 /* ─────────────────────────────────────────────
    API
    ───────────────────────────────────────────── */
 const fetchArmory = (name) =>
-  fetch(`/api/characters/${encodeURIComponent(name)}/armory`).then((r) => {
+  fetch(`${BACKEND_URL}/api/characters/${encodeURIComponent(name)}/armory`).then((r) => {
     if (!r.ok) throw new Error('캐릭터 정보를 불러올 수 없습니다.')
     return r.json()
   })
