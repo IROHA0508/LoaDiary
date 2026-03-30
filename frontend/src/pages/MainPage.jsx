@@ -8,6 +8,7 @@ import { supabase } from '../lib/supabase'
 import GroupModal from '../components/GroupModal'
 import GroupCreateModal from '../components/GroupCreateModal'
 import { getMyGroups, reorderGroups } from '../api/groups'
+import { useCallback } from 'react'
 
 /* ─────────────────────────────────────────────
    레이드 섹션 레이아웃 상수
@@ -129,16 +130,35 @@ const CLASS_SYNERGY = {
 // 파티 내 배치된 캐릭터들의 시너지 태그 집합을 계산
 // is_support === true 인 캐릭터(발키리-빛의기사, 도화가-만개, 바드-절실한구원, 홀리나이트-축복의오라 등)는
 // 서포터 빌드로 시너지를 제공하지 않으므로 제외
+// 시너지 겹치면 1개로 표시되는 코드 -> 수정
+// function calcPartySynergies(partySlots) {
+//   const synSet = new Set()
+//   partySlots.forEach(({ char }) => {
+//     if (!char?.class_name) return
+//     if (char.is_support === true) return   // 서포터 빌드 → 시너지 없음
+//     const tags = CLASS_SYNERGY[char.class_name] || []
+//     tags.forEach(t => synSet.add(t))
+//   })
+//   // 우선순위 순으로 정렬해서 반환
+//   return SYNERGY_ORDER.filter(s => synSet.has(s))
+// }
+
+// 시너지 겹쳐도 개수만큼 표시되는 코드
 function calcPartySynergies(partySlots) {
-  const synSet = new Set()
+  const synergies = []
+
   partySlots.forEach(({ char }) => {
     if (!char?.class_name) return
     if (char.is_support === true) return   // 서포터 빌드 → 시너지 없음
+
     const tags = CLASS_SYNERGY[char.class_name] || []
-    tags.forEach(t => synSet.add(t))
+    tags.forEach(tag => synergies.push(tag))
   })
-  // 우선순위 순으로 정렬해서 반환
-  return SYNERGY_ORDER.filter(s => synSet.has(s))
+
+  // 우선순위 순으로 정렬하되, 같은 시너지도 개수만큼 유지
+  return synergies.sort(
+    (a, b) => SYNERGY_ORDER.indexOf(a) - SYNERGY_ORDER.indexOf(b)
+  )
 }
 
 /* ─────────────────────────────────────────────
@@ -198,10 +218,26 @@ export default function MainPage() {
       navigate(`/characters/${name}`)
     }
   }
+  // --------------------------------------------그룹 실시간 갱신 수정 코드---------------------------------------------
+  // 그룹 목록 재조회
+  const fetchGroups = useCallback(async () => {
+    if (!fingerprint) return
+    try {
+      setGroupLoading(true)
+      const data = await getMyGroups(fingerprint)
+      setGroups(data)
+    } catch (error) {
+      console.error('그룹 목록 조회 실패:', error)
+    } finally {
+      setGroupLoading(false)
+    }
+  }, [fingerprint])
 
   // 드래그 관련 상태
   const [raidOrder, setRaidOrder] = useState([])
-  const [orderedRaids, setOrderedRaids] = useState([])
+
+  // 레이드 목록 실시간 갱신을 위한 코드 수정 -> 주석 처리
+  // const [orderedRaids, setOrderedRaids] = useState([])
   const dragIndex = useRef(null)
   const dragOverIndex = useRef(null)
 
@@ -226,18 +262,26 @@ export default function MainPage() {
   })
 
   // 내가 참여한 레이드
+  // 레이드 실시간 갱신을 위해 코드 수정
+  // const { data: joinedRaids = [], isLoading: joinedRaidsLoading } = useQuery({
+  //   queryKey: ['joinedRaids', fingerprint],
+  //   queryFn: () => getJoinedRaids(fingerprint),
+  //   enabled: !!fingerprint,
+  //   onSuccess: (data) => {
+  //     const merged = [
+  //       ...myRaids,
+  //       ...data.filter(jr => !myRaids.some(mr => mr.id === jr.id))
+  //     ]
+  //     setOrderedRaids(merged)
+  //     setRaidOrder(merged.map(r => r.id))
+  //   }
+  // })
+
+  // 내가 참여한 레이드 실시간 갱신을 위한 새로운 코드
   const { data: joinedRaids = [], isLoading: joinedRaidsLoading } = useQuery({
     queryKey: ['joinedRaids', fingerprint],
     queryFn: () => getJoinedRaids(fingerprint),
     enabled: !!fingerprint,
-    onSuccess: (data) => {
-      const merged = [
-        ...myRaids,
-        ...data.filter(jr => !myRaids.some(mr => mr.id === jr.id))
-      ]
-      setOrderedRaids(merged)
-      setRaidOrder(merged.map(r => r.id))
-    }
   })
 
   const raidLoading = myRaidsLoading || joinedRaidsLoading
@@ -247,6 +291,23 @@ export default function MainPage() {
     ...myRaids,
     ...joinedRaids.filter(jr => !myRaids.some(mr => mr.id === jr.id))
   ]
+
+  // rawRaids 변경 시 raidOrder를 현재 목록과 동기화
+  // - 새로 추가된 레이드는 맨 앞으로 자동 추가
+  // - 삭제된 레이드는 순서 배열에서 제거
+  useEffect(() => {
+    const rawIds = rawRaids.map(r => r.id)
+
+    setRaidOrder(prev => {
+      // 기존 순서 중 아직 존재하는 것만 유지
+      const kept = prev.filter(id => rawIds.includes(id))
+
+      // 새로 들어온 레이드 id 추가
+      const added = rawIds.filter(id => !kept.includes(id))
+
+      return [...added, ...kept]
+    })
+  }, [rawRaids])
 
   // 순서 배열 기반으로 raids 정렬
   const baseRaids = raidOrder.length > 0
@@ -265,40 +326,74 @@ export default function MainPage() {
   // raids가 확정되면 각 레이드의 슬롯 일괄 조회
   // rawRaids가 바뀔 때마다 새 레이드의 슬롯만 추가 조회
   const prevRaidIdsRef = useRef(new Set())
-  if (!raidLoading && rawRaids.length > 0) {
-    const newIds = rawRaids.filter(r => !prevRaidIdsRef.current.has(r.id))
-    if (newIds.length > 0) {
-      newIds.forEach(r => prevRaidIdsRef.current.add(r.id))
-      Promise.all(newIds.map(r => getSlots(r.id).then(slots => ({ id: r.id, slots }))))
-        .then(results => {
-          setSlotsMap(prev => {
-            const next = { ...prev }
-            results.forEach(({ id, slots }) => { next[id] = slots })
-            return next
-          })
-        })
-    }
-  }
+  // if (!raidLoading && rawRaids.length > 0) {
+  //   const newIds = rawRaids.filter(r => !prevRaidIdsRef.current.has(r.id))
+  //   if (newIds.length > 0) {
+  //     newIds.forEach(r => prevRaidIdsRef.current.add(r.id))
+  //     Promise.all(newIds.map(r => getSlots(r.id).then(slots => ({ id: r.id, slots }))))
+  //       .then(results => {
+  //         setSlotsMap(prev => {
+  //           const next = { ...prev }
+  //           results.forEach(({ id, slots }) => { next[id] = slots })
+  //           return next
+  //         })
+  //       })
+  //   }
+  // }
 
+  // GPT 의견: React 규칙 위한, 버그 가능성 있음 -> 미리 코드 변경함
+  useEffect(() => {
+    if (raidLoading || rawRaids.length === 0) return
+
+    const newIds = rawRaids.filter(r => !prevRaidIdsRef.current.has(r.id))
+    if (newIds.length === 0) return
+
+    newIds.forEach(r => prevRaidIdsRef.current.add(r.id))
+
+    Promise.all(
+      newIds.map(r =>
+        getSlots(r.id).then(slots => ({ id: r.id, slots }))
+      )
+    ).then(results => {
+      setSlotsMap(prev => {
+        const next = { ...prev }
+        results.forEach(({ id, slots }) => {
+          next[id] = slots
+        })
+        return next
+      })
+    })
+  }, [raidLoading, rawRaids])
   /* ── 레이드 삭제 ──────────────────────────── */
   const deleteMutation = useMutation({
     mutationFn: (raidId) => deleteRaid(raidId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['myRaids', fingerprint] })
       queryClient.invalidateQueries({ queryKey: ['joinedRaids', fingerprint] })
+
+      queryClient.refetchQueries({ queryKey: ['myRaids', fingerprint] })
+      queryClient.refetchQueries({ queryKey: ['joinedRaids', fingerprint] })
       setRaidToDelete(null)
     },
   })
 
   // 그룹 관련 useEffect
+
+  // 초기 그룹 목록 조회 코드 - 실시간 갱신을 위해 아래 코드로 변경
+  // useEffect(() => {
+  //   if (!fingerprint) return
+  //   setGroupLoading(true)
+  //   getMyGroups(fingerprint)
+  //     .then(setGroups)
+  //     .catch(() => {})
+  //     .finally(() => setGroupLoading(false))
+  // }, [fingerprint])
+
+  // 그룹 목록 조회 실시간 갱신용
   useEffect(() => {
     if (!fingerprint) return
-    setGroupLoading(true)
-    getMyGroups(fingerprint)
-      .then(setGroups)
-      .catch(() => {})
-      .finally(() => setGroupLoading(false))
-  }, [fingerprint])
+    fetchGroups()
+  }, [fingerprint, fetchGroups])
 
   /* ── Supabase Realtime 구독 ──────────────── */
   // raid_members, raid_slots, raids 테이블 변경 시 즉시 갱신
@@ -306,6 +401,34 @@ export default function MainPage() {
   useEffect(() => {
     if (!fingerprint) return
 
+    let raidListTimer = null
+    const raidSlotTimers = new Map()
+
+    const debouncedRefetchRaidLists = () => {
+      if (raidListTimer) clearTimeout(raidListTimer)
+      raidListTimer = setTimeout(() => {
+        queryClient.refetchQueries({ queryKey: ['joinedRaids', fingerprint] })
+        queryClient.refetchQueries({ queryKey: ['myRaids', fingerprint] })
+      }, 120)
+    }
+
+    const debouncedFetchRaidSlots = (raidId) => {
+      if (!raidId) return
+
+      const prevTimer = raidSlotTimers.get(raidId)
+      if (prevTimer) clearTimeout(prevTimer)
+
+      const nextTimer = setTimeout(() => {
+        getSlots(raidId).then(slots => {
+          setSlotsMap(prev => ({ ...prev, [raidId]: slots }))
+        })
+        raidSlotTimers.delete(raidId)
+      }, 120)
+
+      raidSlotTimers.set(raidId, nextTimer)
+    }
+
+  
     // raid_members 변경 구독 → 내가 레이드에 초대됐을 때 joinedRaids 갱신
     const membersChannel = supabase
       .channel('mainpage_raid_members')
@@ -313,10 +436,16 @@ export default function MainPage() {
         event: '*',
         schema: 'public',
         table: 'raid_members',
-      }, () => {
-        queryClient.invalidateQueries({ queryKey: ['joinedRaids', fingerprint] })
-        queryClient.invalidateQueries({ queryKey: ['myRaids', fingerprint] })
-      })
+      }, 
+      // () => {
+      //   queryClient.invalidateQueries({ queryKey: ['joinedRaids', fingerprint] })
+      //   queryClient.invalidateQueries({ queryKey: ['myRaids', fingerprint] })
+
+      //   queryClient.refetchQueries({ queryKey: ['joinedRaids', fingerprint] })
+      //   queryClient.refetchQueries({ queryKey: ['myRaids', fingerprint] })
+      // }
+      debouncedRefetchRaidLists
+      )
       .subscribe()
 
     // raid_slots 변경 구독 → 다른 유저가 슬롯 배치/제거하면 슬롯 정보 갱신
@@ -326,14 +455,20 @@ export default function MainPage() {
         event: '*',
         schema: 'public',
         table: 'raid_slots',
-      }, (payload) => {
-        // 변경된 슬롯의 raid_id만 재조회
+      }, 
+      // (payload) => {
+      //   // 변경된 슬롯의 raid_id만 재조회
+      //   const changedRaidId = payload.new?.raid_id ?? payload.old?.raid_id
+      //   if (!changedRaidId) return
+      //   getSlots(changedRaidId).then(slots => {
+      //     setSlotsMap(prev => ({ ...prev, [changedRaidId]: slots }))
+      //   })
+      // }
+      (payload) => {
         const changedRaidId = payload.new?.raid_id ?? payload.old?.raid_id
-        if (!changedRaidId) return
-        getSlots(changedRaidId).then(slots => {
-          setSlotsMap(prev => ({ ...prev, [changedRaidId]: slots }))
-        })
-      })
+        debouncedFetchRaidSlots(changedRaidId)
+      }
+      )
       .subscribe()
 
     // raids 변경 구독 → 레이드 생성/삭제 시 목록 갱신
@@ -343,18 +478,90 @@ export default function MainPage() {
         event: '*',
         schema: 'public',
         table: 'raids',
-      }, () => {
-        queryClient.invalidateQueries({ queryKey: ['myRaids', fingerprint] })
-        queryClient.invalidateQueries({ queryKey: ['joinedRaids', fingerprint] })
-      })
+      }, 
+      // () => {
+      //   queryClient.invalidateQueries({ queryKey: ['myRaids', fingerprint] })
+      //   queryClient.invalidateQueries({ queryKey: ['joinedRaids', fingerprint] })
+
+      //   queryClient.refetchQueries({ queryKey: ['myRaids', fingerprint] })
+      //   queryClient.refetchQueries({ queryKey: ['joinedRaids', fingerprint] })
+      // }
+      debouncedRefetchRaidLists
+      )
       .subscribe()
 
+    // return () => {
+    //   supabase.removeChannel(membersChannel)
+    //   supabase.removeChannel(slotsChannel)
+    //   supabase.removeChannel(raidsChannel)
+    // }
     return () => {
+      if (raidListTimer) clearTimeout(raidListTimer)
+      raidSlotTimers.forEach((timer) => clearTimeout(timer))
+      raidSlotTimers.clear()
+
       supabase.removeChannel(membersChannel)
       supabase.removeChannel(slotsChannel)
       supabase.removeChannel(raidsChannel)
     }
-  }, [fingerprint])
+  }, [fingerprint, queryClient])
+
+  /* ── 그룹 Supabase Realtime 구독 ───────────── */
+  // groups, group_members 테이블 변경 시 즉시 갱신
+  // - 유저 A가 유저 B를 그룹에 추가하면 B의 메인페이지에서 즉시 반영
+  useEffect(() => {
+    if (!fingerprint) return
+    // 디바운스 코드 추가
+    let groupFetchTimer = null
+
+    const debounceFetchGroups = () => {
+      if (groupFetchTimer) clearTimeout(groupFetchTimer)
+      groupFetchTimer = setTimeout(() => {
+        fetchGroups()
+      },120)
+    }
+    const groupsChannel = supabase
+      .channel(`mainpage_groups_${fingerprint}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'groups',
+        },
+        // async () => {
+        //   await fetchGroups()
+        // }
+        debounceFetchGroups
+      )
+      .subscribe()
+
+    const groupMembersChannel = supabase
+      .channel(`mainpage_group_members_${fingerprint}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'group_members',
+        },
+        // async () => {
+        //   await fetchGroups()
+        // }
+        debounceFetchGroups
+      )
+      .subscribe()
+
+    // return () => {
+    //   supabase.removeChannel(groupsChannel)
+    //   supabase.removeChannel(groupMembersChannel)
+    // }
+    return () => {
+      if (groupFetchTimer) clearTimeout(groupFetchTimer)
+      supabase.removeChannel(groupsChannel)
+      supabase.removeChannel(groupMembersChannel)
+    }   
+  }, [fingerprint, fetchGroups])
 
   /* ── 드래그 앤 드롭 핸들러 ────────────────── */
   const handleDragStart = (index) => {
