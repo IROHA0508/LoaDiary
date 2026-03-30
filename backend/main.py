@@ -27,6 +27,7 @@ app.add_middleware(
 
     # 배포 이후 사용할 프론트엔드 주소
     "https://loakit.vercel.app",
+    "https://loa-diary.vercel.app",
 
     # 백엔드 koyeb 주소
     "https://legitimate-dreddy-lunarproject-10a2d90e.koyeb.app/"
