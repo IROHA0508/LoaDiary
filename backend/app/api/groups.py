@@ -58,13 +58,33 @@ class GroupReorder(BaseModel):
     fingerprint: str
     group_ids: List[str]
 
-
+# 내가 속한 그룹 리스트 조회
 @router.get("/{fingerprint}")
 def get_my_groups(fingerprint: str):
     user_id = _resolve_user_id(fingerprint)
-    groups = (
-        supabase.table("groups").select("*").eq("user_id", user_id).order("sort_order").execute()
+
+    # 1. 내가 포함된 group_id 찾기
+    member_rows = (
+        supabase.table("group_members")
+        .select("group_id")
+        .eq("user_id", user_id)
+        .execute()
     ).data or []
+
+    group_ids = list(set(m["group_id"] for m in member_rows))
+
+    if not group_ids:
+        return []
+    
+    # 2. 포함된 그룹들 조회
+    groups = (
+        supabase.table("groups")
+        .select("*")
+        .in_("id", group_ids)
+        .order("sort_order")
+        .execute()
+    ).data or []
+
     return [_build_group_with_members(g) for g in groups]
 
 
