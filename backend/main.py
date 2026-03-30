@@ -24,6 +24,7 @@ app.add_middleware(
   allow_origins=[
     # 개발 중 사용할 프론트엔드 주소
     "http://localhost:5173",
+    "http://localhost:4173",
 
     # 배포 이후 사용할 프론트엔드 주소
     "https://loakit.vercel.app",

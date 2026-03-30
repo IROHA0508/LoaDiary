@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, HTTPException
 from typing import List
 from app.schemas import CharacterResponse
 from app.db.supabase_client import supabase
@@ -85,34 +85,43 @@ async def get_my_characters(fingerprint: str):
 
 
 # 캐릭터 동기화 (나 혼자)
-@router.post("/{fingerprint}/sync")
-async def sync_characters(
-    fingerprint: str,
-    representative: str,
-    background_tasks: BackgroundTasks  # ← 추가
-):
+@router.post("/{fingerprint}/sync", response_model=List[CharacterResponse])
+async def sync_characters(fingerprint: str, representative: str):
     user_id = _resolve_user_id(fingerprint)
 
-    # 1. Loa API로 캐릭터 존재 여부만 먼저 확인 (빠름)
     raw = await get_characters(representative)
     if not raw:
-      raise HTTPException(status_code=404, detail="캐릭터를 찾을 수 없습니다. 캐릭터명을 다시 확인해주세요.")
+        raise HTTPException(
+            status_code=404,
+            detail="캐릭터를 찾을 수 없습니다. 캐릭터명을 다시 확인해주세요."
+        )
 
-    # 2. 실제 동기화(느린 작업)는 백그라운드로 처리
-    background_tasks.add_task(_sync_task, user_id, raw)
-
-    # 3. 즉시 응답 반환 (프론트는 기다리지 않아도 됨)
-    return {"status": "syncing", "message": "캐릭터 동기화를 시작했어요."}
-
-
-async def _sync_task(user_id: str, raw: list):
-    """백그라운드에서 실행되는 실제 동기화 작업"""
+    parsed = await parse_characters(raw, user_id)
     now = datetime.now(timezone.utc).isoformat()
-    try:
-        parsed = await parse_characters(raw, user_id)
-        _upsert_characters(user_id, parsed, now)
-    except Exception as e:
-        print(f"Background sync 실패: {e}")
+    _upsert_characters(user_id, parsed, now)
+
+    result = (
+        supabase.table("characters")
+        .select("*")
+        .eq("user_id", user_id)
+        .order("item_level", desc=True)
+        .execute()
+    )
+    rows = []
+    for row in result.data:
+        row["class_name"] = row.pop("class", None)
+        rows.append(row)
+    return rows
+
+
+# async def _sync_task(user_id: str, raw: list):
+#     """백그라운드에서 실행되는 실제 동기화 작업"""
+#     now = datetime.now(timezone.utc).isoformat()
+#     try:
+#         parsed = await parse_characters(raw, user_id)
+#         _upsert_characters(user_id, parsed, now)
+#     except Exception as e:
+#         print(f"Background sync 실패: {e}")
 
 # 전체 동기화: 내 캐릭터 + 레이드 멤버 전원
 @router.post("/{fingerprint}/sync-all")

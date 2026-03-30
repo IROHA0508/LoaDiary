@@ -3,7 +3,7 @@ import axios from 'axios'
 // axios 인스턴스 생성
 const client = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000',
-  timeout: 10000,  // 10초 타임아웃 (무한 대기 방지)
+  timeout: 500000,  // 500초 타임아웃 (무한 대기 방지)
   headers: {
     'Content-Type': 'application/json',
   },
@@ -13,7 +13,7 @@ const client = axios.create({
 // sync, sync-all, armory 등 외부 API 의존 엔드포인트에 사용
 export const slowClient = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000',
-  timeout: 120000, // 120초 (캐릭터 20개 기준 여유 있게)
+  timeout: 800000, // 800초 (캐릭터 20개 기준 여유 있게)
   headers: { 'Content-Type': 'application/json' },
 })
 
