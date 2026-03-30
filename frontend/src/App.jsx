@@ -66,9 +66,9 @@ function AppRoutes(){
       <Route path="/onboarding" element={<OnboardingPage />} />
       
       {/* 나머지 모든 페이지는 Layout(공통 헤더) 안에서 렌더링 */}
-      <Route element={<Layout />}>
+      <Route path="/" element={<Layout />}>
         {/* path="/" : 메인 URL일 때 MainPage 컴포넌트 표시 */}
-        <Route path="/" element={<MainPage />} />
+        <Route index element={<MainPage />} />
 
         <Route path="/raids/new" element={<RaidNewPage />} />
 
