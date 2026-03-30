@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useUser } from "../../hooks/useUser";
 import { supabase } from "../../lib/supabase";
 import { getMyGroups } from '../../api/groups'
+import { getUser } from '../../api/users'
 // BACKEND_URL 상수 및 raw fetch 제거하고, import 추가
 import client from '../../api/client'
 // 기존 raids.js 함수 재사용
@@ -233,92 +234,89 @@ export default function RaidDetailPage() {
   useEffect(() => {
     if (!raidId || !fingerprint) return;
 
-    const load = async () => {
-      try {
-        const [raidData, slotsData, charsData, groupsData] = await Promise.all([
-          API.getRaid(raidId),
-          API.getSlots(raidId),
-          API.getMyCharacters(fingerprint),
-          API.getMembers(raidId),
-          getMyGroups(fingerprint).catch(() => []),   // 그룹 로드 실패해도 계속
-        ]);
-        setRaid(raidData);
-        setSlots(slotsData);
-        setMyCharacters(charsData);
-        setMyGroups(groupsData);
+  const load = async () => {
+    try {
+      // ✅ 5번째 변수 membersData → groupsData 순서로 올바르게 받기
+      const [raidData, slotsData, charsData, membersData, groupsData, myUserData] = await Promise.all([
+        API.getRaid(raidId),
+        API.getSlots(raidId),
+        API.getMyCharacters(fingerprint),
+        API.getMembers(raidId),
+        getMyGroups(fingerprint).catch(() => []),
+        getUser(fingerprint).catch(() => null),  // 현재 유저 정보 (representative 필요)
+      ]);
+      setRaid(raidData);
+      setSlots(slotsData);
+      setMyCharacters(charsData);
+      setMyGroups(groupsData);  // ✅ 이제 실제 그룹 데이터
 
-        // ── 그룹 내 원정대 순서 계산 ──────────────────────────
-        // 그룹 슬롯 순서 → 그룹 내 멤버 sort_order 순으로 flatten
-        const groupMemberOrder = [];
-        groupsData.forEach(group => {
-          group.members.forEach(m => {
-            if (!groupMemberOrder.includes(m.representative)) {
-              groupMemberOrder.push(m.representative);
-            }
-          });
+      // 현재 유저의 representative (자기 자신 필터링용)
+      const myRepresentative = myUserData?.representative ?? null;
+      
+      const groupMemberOrder = [];
+      groupsData.forEach(group => {  // ✅ 이제 group.members 정상 접근
+        group.members.forEach(m => {
+          if (!groupMemberOrder.includes(m.representative) && m.representative !== myRepresentative) {
+            groupMemberOrder.push(m.representative);
+          }
         });
+      });
 
-        // ── 최근 멤버 + 그룹 멤버 자동 로드 ──────────────────
-        const recentReps = loadRecentMembers();
-        const existingReps = new Set(membersData.map(m => m.representative));
-  
-        // 자동 로드 대상: (최근 멤버 + 그룹 멤버) 중 아직 없는 원정대
-        const toAutoLoad = [
-          ...recentReps.filter(r => !existingReps.has(r)),
-          ...groupMemberOrder.filter(r => !existingReps.has(r) && !recentReps.includes(r)),
-        ];
-        
-        const autoLoaded = new Set();
-        for (const rep of toAutoLoad) {
-          try {
-            await API.addMember(raidId, rep, fingerprint);
-            autoLoaded.add(rep);
-          } catch {}
-        }
-  
-        // 최신 멤버 목록 재조회
-        let finalMembers = membersData;
-        if (autoLoaded.size > 0) {
-          finalMembers = await API.getMembers(raidId);
-          setAutoLoadedReps(autoLoaded);
-        }
+      const recentReps = loadRecentMembers();
+      const existingReps = new Set(membersData.map(m => m.representative));  // ✅ 올바른 변수
 
-        // ── 멤버 표시 순서 정렬 ────────────────────────────────
-        // 1. 최근 이용한 원정대 (recentReps 순)
-        // 2. 그룹 멤버 (groupMemberOrder 순)
-        // 3. 나머지
-        const sortedMembers = [...finalMembers].sort((a, b) => {
-          const aRecent = recentReps.indexOf(a.representative);
-          const bRecent = recentReps.indexOf(b.representative);
-          const aGroup  = groupMemberOrder.indexOf(a.representative);
-          const bGroup  = groupMemberOrder.indexOf(b.representative);
-  
-          if (aRecent !== -1 && bRecent !== -1) return aRecent - bRecent;
-          if (aRecent !== -1) return -1;
-          if (bRecent !== -1) return 1;
-          if (aGroup !== -1 && bGroup !== -1) return aGroup - bGroup;
-          if (aGroup !== -1) return -1;
-          if (bGroup !== -1) return 1;
-          return 0;
-        });
-        setMembers(sortedMembers);
-
-        // 주간 중복 참여 슬롯 조회 (같은 raid_id 종류의 다른 인스턴스에 배치된 캐릭터)
+      const toAutoLoad = [
+        ...recentReps.filter(r => !existingReps.has(r)),
+        ...groupMemberOrder.filter(r => !existingReps.has(r) && !recentReps.includes(r)),
+      ];
+      
+      const autoLoaded = new Set();
+      for (const rep of toAutoLoad) {
         try {
-          const weeklySlots = await API.getWeeklyUsedSlots(raidData.raid_id, getWeekStart());
-          // 현재 레이드 인스턴스(raidId) 제외한 슬롯의 character_id 집합
-          const usedIds = new Set(
-            weeklySlots
-              .filter((s) => s.raid_instance_id !== raidId)
-              .map((s) => s.character_id)
-          );
-          setWeeklyUsedCharIds(usedIds);
+          await API.addMember(raidId, rep, fingerprint);
+          autoLoaded.add(rep);
         } catch {}
-        setError(e.message);
-      } finally {
-        setLoading(false);
       }
-    };
+
+      let finalMembers = membersData;  // ✅ 올바른 변수
+      if (autoLoaded.size > 0) {
+        finalMembers = await API.getMembers(raidId);
+        setAutoLoadedReps(autoLoaded);
+      }
+
+      const sortedMembers = [...finalMembers].sort((a, b) => {
+        const aRecent = recentReps.indexOf(a.representative);
+        const bRecent = recentReps.indexOf(b.representative);
+        const aGroup  = groupMemberOrder.indexOf(a.representative);
+        const bGroup  = groupMemberOrder.indexOf(b.representative);
+
+        if (aRecent !== -1 && bRecent !== -1) return aRecent - bRecent;
+        if (aRecent !== -1) return -1;
+        if (bRecent !== -1) return 1;
+        if (aGroup !== -1 && bGroup !== -1) return aGroup - bGroup;
+        if (aGroup !== -1) return -1;
+        if (bGroup !== -1) return 1;
+        return 0;
+      });
+      setMembers(sortedMembers);
+
+      try {
+        const weeklySlots = await API.getWeeklyUsedSlots(raidData.raid_id, getWeekStart());
+        const usedIds = new Set(
+          weeklySlots
+            .filter((s) => s.raid_instance_id !== raidId)
+            .map((s) => s.character_id)
+        );
+        setWeeklyUsedCharIds(usedIds);
+      } catch {}
+      // ✅ setError(e.message) 제거 (catch 밖에서 e를 참조하던 잘못된 코드)
+
+    } catch (e) {
+      setError(e.message);  // ✅ catch 블록 안으로 이동
+    } finally {
+      setLoading(false);
+    }
+  };
 
     load();
   }, [raidId, fingerprint]);

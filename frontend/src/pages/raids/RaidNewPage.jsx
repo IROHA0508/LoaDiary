@@ -222,7 +222,7 @@ const DIFF_COLORS = {
    ───────────────────────────────────────────── */
 export default function RaidNewPage() {
   // 렌더링 확인용 디버그 코드
-  console.log('RaidNewPage render', window.location.pathname)
+  // console.log('RaidNewPage render', window.location.pathname)
   const navigate = useNavigate();
   const { fingerprint } = useUser();
   const [step, setStep] = useState(1);
