@@ -1,3 +1,6 @@
+// 최적화를 위한 lazy import
+import { lazy, Suspense } from 'react'
+
 import { useEffect } from 'react'
 // BrowserRouter : 전체 앱을 감싸는 라우터 컨테이너, URL 변경을 감지해서 맞는 페이지를 보여줌
 // Routes : Route들을 감싸는 컨테이너
@@ -14,17 +17,28 @@ import { getUser } from './api/users'
 
 // export default로 내보낸 컴포넌트는 중괄호 없이 import 가능
 import Layout from './components/Layout'
-import OnboardingPage from './pages/OnboardingPage'
-import MainPage from './pages/MainPage'
-import RaidNewPage from './pages/raids/RaidNewPage'
-import RaidDetailPage from './pages/raids/RaidDetailPage'
-import RankingPage from './pages/features/RankingPage'
-import MarketPage from './pages/features/MarketPage'
-import MerchantPage from './pages/features/MerchantPage'
-import CharacterDetailPage from './pages/CharacterDetailPage'
 
-// QueryClient 인스턴스 생성
-const queryClient = new QueryClient()
+// 모든 페이지를 lazy import로 전환
+const OnboardingPage     = lazy(() => import('./pages/OnboardingPage'))
+const MainPage           = lazy(() => import('./pages/MainPage'))
+const RaidNewPage        = lazy(() => import('./pages/raids/RaidNewPage'))
+const RaidDetailPage     = lazy(() => import('./pages/raids/RaidDetailPage'))
+const RankingPage        = lazy(() => import('./pages/features/RankingPage'))
+const MarketPage         = lazy(() => import('./pages/features/MarketPage'))
+const MerchantPage       = lazy(() => import('./pages/features/MerchantPage'))
+const CharacterDetailPage = lazy(() => import('./pages/CharacterDetailPage'))
+
+// QueryClient 인스턴스 생성 + 최적화
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 30,        // 30초 내 재요청 없음 (탭 전환 방지)
+      gcTime: 1000 * 60 * 5,       // 5분간 캐시 유지
+      retry: 1,                     // 실패 시 1회만 재시도 (기본 3회)
+      refetchOnWindowFocus: false,  // 탭 복귀 시 자동 재요청 끄기
+    },
+  },
+})
 
 // 라우트 가드 역할 컴포넌트
 function AppRoutes(){
@@ -64,34 +78,41 @@ function AppRoutes(){
   }
 
   return (
-    <Routes>
-      {/* path="/onboarding" : /onboarding URL일 때 OnboardingPage 표시 */}
-      <Route path="/onboarding" element={<OnboardingPage />} />
-      
-      {/* 나머지 모든 페이지는 Layout(공통 헤더) 안에서 렌더링 */}
-      <Route path="/" element={<Layout />}>
-        {/* path="/" : 메인 URL일 때 MainPage 컴포넌트 표시 */}
-        <Route index element={<MainPage />} />
+    // 최적화를 위한 Suspense로 감싸기
+    <Suspense fallback = {
+    <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+      <p className="text-gray-500">로딩 중...</p>
+    </div>
+    }>
+      <Routes>
+        {/* path="/onboarding" : /onboarding URL일 때 OnboardingPage 표시 */}
+        <Route path="/onboarding" element={<OnboardingPage />} />
+        
+        {/* 나머지 모든 페이지는 Layout(공통 헤더) 안에서 렌더링 */}
+        <Route path="/" element={<Layout />}>
+          {/* path="/" : 메인 URL일 때 MainPage 컴포넌트 표시 */}
+          <Route index element={<MainPage />} />
 
-        <Route path="raids/new" element={<RaidNewPage />} />
+          <Route path="raids/new" element={<RaidNewPage />} />
 
-        {/* path="/raids/:id" : 레이드 상세 및 파티 배치 페이지 */}
-        <Route path="raids/:id" element={<RaidDetailPage />} />
+          {/* path="/raids/:id" : 레이드 상세 및 파티 배치 페이지 */}
+          <Route path="raids/:id" element={<RaidDetailPage />} />
 
-        {/* 헤더에 있는 랭킹, 거래소, 떠돌이 상인 페이지 */}
-        <Route path="ranking" element={<RankingPage />} />
-        <Route path="market" element={<MarketPage />} />
-        <Route path="merchants" element={<MerchantPage />} />
+          {/* 헤더에 있는 랭킹, 거래소, 떠돌이 상인 페이지 */}
+          <Route path="ranking" element={<RankingPage />} />
+          <Route path="market" element={<MarketPage />} />
+          <Route path="merchants" element={<MerchantPage />} />
 
-        {/* 캐릭터 상세 페이지  */}
-        <Route path="characters/:name" element={<CharacterDetailPage />} />
-      </Route>
+          {/* 캐릭터 상세 페이지  */}
+          <Route path="characters/:name" element={<CharacterDetailPage />} />
+        </Route>
 
-      {/* path="*" : 위에서 매칭되지 않은 모든 URL (ex. /asdfgh) */}
-      {/* Navigate to="/" : 메인 페이지로 리다이렉트 */}
-      {/* replace : 뒤로가기 시 잘못된 URL로 돌아가지 않도록 히스토리 교체 */}
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+        {/* path="*" : 위에서 매칭되지 않은 모든 URL (ex. /asdfgh) */}
+        {/* Navigate to="/" : 메인 페이지로 리다이렉트 */}
+        {/* replace : 뒤로가기 시 잘못된 URL로 돌아가지 않도록 히스토리 교체 */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </Suspense>
   )
 }
 

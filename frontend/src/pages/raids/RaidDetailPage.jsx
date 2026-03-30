@@ -491,19 +491,61 @@ export default function RaidDetailPage() {
     !isCharPlaced(charId) && !isUserAlreadyPlaced(charId) && !isLevelInsufficient(charId) && !isWeeklyUsed(charId);
 
   /* ── 클릭으로 배치 / 제거 ──────────────────── */
+  // 최적화 코드로 교체하기 위해 주석처리
+  // const onCharClick = async (charId) => {
+  //   if (isUserAlreadyPlaced(charId)) return;
+  //   if (isLevelInsufficient(charId)) return;
+  //   if (isWeeklyUsed(charId)) return;
+
+  //   const existingSlot = slots.find((s) => s.character_id === charId);
+  //   if (existingSlot) {
+  //     // 이미 배치됨 → 제거
+  //     await onRemoveFromSlot(existingSlot.id);
+  //     return;
+  //   }
+
+  //   // 빈 슬롯을 slotOrder 오름차순으로 탐색
+  //   const occupiedOrders = new Set(slots.map((s) => s.slot_order));
+  //   const totalSlots = raid?.max_slots ?? 0;
+  //   let targetOrder = null;
+  //   for (let i = 0; i < totalSlots; i++) {
+  //     if (!occupiedOrders.has(i)) { targetOrder = i; break; }
+  //   }
+  //   if (targetOrder === null) { showToast("빈 슬롯이 없습니다."); return; }
+
+  //   try {
+  //     const newSlot = await API.addSlot(raidId, {
+  //       character_id: charId,
+  //       slot_order: targetOrder,
+  //       role: null,
+  //     });
+  //     setSlots((prev) => [...prev, newSlot]);
+  //   } catch (e) {
+  //     showToast(e.message);
+  //   }
+  // };
+
   const onCharClick = async (charId) => {
     if (isUserAlreadyPlaced(charId)) return;
     if (isLevelInsufficient(charId)) return;
     if (isWeeklyUsed(charId)) return;
 
+    // ── 제거 케이스 ──
     const existingSlot = slots.find((s) => s.character_id === charId);
     if (existingSlot) {
-      // 이미 배치됨 → 제거
-      await onRemoveFromSlot(existingSlot.id);
+      // Optimistic: 즉시 UI에서 제거
+      setSlots((prev) => prev.filter((s) => s.id !== existingSlot.id));
+      try {
+        await API.removeSlot(existingSlot.id);
+      } catch (e) {
+        // 실패 시 롤백
+        setSlots((prev) => [...prev, existingSlot]);
+        showToast("슬롯 제거에 실패했습니다.");
+      }
       return;
     }
 
-    // 빈 슬롯을 slotOrder 오름차순으로 탐색
+    // ── 배치 케이스 ──
     const occupiedOrders = new Set(slots.map((s) => s.slot_order));
     const totalSlots = raid?.max_slots ?? 0;
     let targetOrder = null;
@@ -512,18 +554,35 @@ export default function RaidDetailPage() {
     }
     if (targetOrder === null) { showToast("빈 슬롯이 없습니다."); return; }
 
+    // Optimistic: 임시 슬롯 ID로 즉시 UI 반영
+    const char = allCharacters.find((c) => c.id === charId);
+    const tempId = `temp-${Date.now()}`;
+    const tempSlot = {
+      id: tempId,
+      character_id: charId,
+      slot_order: targetOrder,
+      character_name: char?.name ?? null,
+      class_name: char?.class_name ?? null,
+      is_support: char?.is_support ?? null,
+      role: null,
+    };
+    setSlots((prev) => [...prev, tempSlot]);
+
     try {
       const newSlot = await API.addSlot(raidId, {
         character_id: charId,
         slot_order: targetOrder,
         role: null,
       });
-      setSlots((prev) => [...prev, newSlot]);
+      // 임시 슬롯을 실제 슬롯으로 교체
+      setSlots((prev) => prev.map((s) => s.id === tempId ? newSlot : s));
     } catch (e) {
+      // 실패 시 임시 슬롯 롤백
+      setSlots((prev) => prev.filter((s) => s.id !== tempId));
       showToast(e.message);
     }
   };
-
+  
   /* ── 로딩 / 에러 ───────────────────────────── */
   if (loading) {
     return (

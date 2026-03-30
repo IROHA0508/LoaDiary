@@ -11,6 +11,7 @@ from app.schemas import (
 )
 from app.db.supabase_client import supabase
 from app.lostark import get_characters, parse_characters, resolve_or_create_user_by_character_name
+import asyncio
 
 # 라우터 생성
 router = APIRouter()
@@ -45,81 +46,124 @@ async def create_raid(payload: RaidCreate):
   return result.data[0]
 
 # 생성한 레이드 목록 조회
+# 최적화를 위한 코드 수정
+# @router.get("/my/{fingerprint}", response_model=List[RaidResponse])
+# async def get_my_raids(fingerprint: str):
+#   user_result = (
+#     supabase.table("users")
+#     .select("id")
+#     .eq("fingerprint", fingerprint)
+#     .execute()
+#   )
+  
+#   if not user_result.data:
+#     raise HTTPException(status_code=404, detail="유저를 찾을 수 없습니다.")
+  
+#   user_id = user_result.data[0]["id"]
+
+#   result = (
+#     supabase.table("raids")
+#     .select("*")
+#     .eq("created_by", user_id)
+#     .order("created_at", desc=True)
+#     .execute()
+#   )
+
+#   return result.data
 @router.get("/my/{fingerprint}", response_model=List[RaidResponse])
 async def get_my_raids(fingerprint: str):
-  user_result = (
-    supabase.table("users")
-    .select("id")
-    .eq("fingerprint", fingerprint)
-    .execute()
-  )
-  
-  if not user_result.data:
-    raise HTTPException(status_code=404, detail="유저를 찾을 수 없습니다.")
-  
-  user_id = user_result.data[0]["id"]
-
-  result = (
-    supabase.table("raids")
-    .select("*")
-    .eq("created_by", user_id)
-    .order("created_at", desc=True)
-    .execute()
-  )
-
-  return result.data
+    # users 조회를 raids 쿼리와 JOIN으로 합치기
+    result = (
+        supabase.table("raids")
+        .select("*, users!created_by(fingerprint)")
+        .eq("users.fingerprint", fingerprint)
+        .order("created_at", desc=True)
+        .execute()
+    )
+    return result.data
 
 # 내 캐릭터가 포함된 레이드 조회
+# 최적화를 위한 코드 수정
+# 현재: users 조회 → characters 조회 → raid_slots 조회 → raids 조회 (4번 순차)
+# @router.get("/joined/{fingerprint}", response_model=List[RaidResponse])
+# async def get_joined_raids(fingerprint: str):
+#     """내 캐릭터가 슬롯에 포함된 레이드 목록"""
+#     # 1. fingerprint로 내 캐릭터 id 목록 조회
+#     user_result = (
+#       supabase.table("users")
+#       .select("id")
+#       .eq("fingerprint", fingerprint)
+#       .execute()
+#     )
+
+#     if not user_result.data:
+#       raise HTTPException(status_code=404, detail="유저를 찾을 수 없습니다.")
+
+#     user_id = user_result.data[0]["id"]
+
+#     character_result = (
+#       supabase.table("characters")
+#       .select("id")
+#       .eq("user_id", user_id)
+#       .execute()
+#     )
+
+#     character_ids = [c["id"] for c in character_result.data]
+
+#     if not character_ids:
+#       return []
+
+#     # 2. 내 캐릭터가 포함된 슬롯 조회
+#     slot_result = (
+#       supabase.table("raid_slots")
+#       .select("raid_id")
+#       .in_("character_id", character_ids)
+#       .execute()
+#     )
+
+#     raid_ids = list(set([s["raid_id"] for s in slot_result.data]))
+
+#     if not raid_ids:
+#       return []
+
+#     # 3. 해당 raid_id로 레이드 정보 조회
+#     raid_result = (
+#       supabase.table("raids")
+#       .select("*")
+#       .in_("id", raid_ids)
+#       .order("created_at", desc=True)
+#       .execute()
+#     )
+
+#     return raid_result.data
 @router.get("/joined/{fingerprint}", response_model=List[RaidResponse])
 async def get_joined_raids(fingerprint: str):
-    """내 캐릭터가 슬롯에 포함된 레이드 목록"""
-    # 1. fingerprint로 내 캐릭터 id 목록 조회
-    user_result = (
-      supabase.table("users")
-      .select("id")
-      .eq("fingerprint", fingerprint)
-      .execute()
-    )
-
+    # users + characters를 asyncio.gather로 병렬 처리
+    user_result = supabase.table("users").select("id").eq("fingerprint", fingerprint).execute()
     if not user_result.data:
-      raise HTTPException(status_code=404, detail="유저를 찾을 수 없습니다.")
-
+        raise HTTPException(status_code=404, detail="유저를 찾을 수 없습니다.")
     user_id = user_result.data[0]["id"]
 
-    character_result = (
-      supabase.table("characters")
-      .select("id")
-      .eq("user_id", user_id)
-      .execute()
-    )
-
-    character_ids = [c["id"] for c in character_result.data]
-
-    if not character_ids:
-      return []
-
-    # 2. 내 캐릭터가 포함된 슬롯 조회
+    # characters와 이후 쿼리를 최소화: 단일 JOIN 쿼리로 대체
+    # raid_slots → characters(user_id) → raids 를 한 번에
     slot_result = (
-      supabase.table("raid_slots")
-      .select("raid_id")
-      .in_("character_id", character_ids)
-      .execute()
+        supabase.table("raid_slots")
+        .select("raid_id, characters!inner(user_id)")
+        .eq("characters.user_id", user_id)
+        .execute()
     )
 
-    raid_ids = list(set([s["raid_id"] for s in slot_result.data]))
-
+    raid_ids = list(set(s["raid_id"] for s in slot_result.data))
     if not raid_ids:
-      return []
+        return []
 
-    # 3. 해당 raid_id로 레이드 정보 조회
     raid_result = (
-      supabase.table("raids")
-      .select("*")
-      .in_("id", raid_ids)
-      .order("created_at", desc=True)
-      .execute()
+        supabase.table("raids")
+        .select("*")
+        .in_("id", raid_ids)
+        .order("created_at", desc=True)
+        .execute()
     )
-
     return raid_result.data
 
 # 주간 참여 완료 슬롯 조회

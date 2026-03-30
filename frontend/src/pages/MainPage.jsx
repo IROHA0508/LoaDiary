@@ -206,8 +206,10 @@ export default function MainPage() {
   const [charSearch, setCharSearch] = useState('')
 
   // 그룹 관련 상태
-  const [groups, setGroups]             = useState([])
-  const [groupLoading, setGroupLoading] = useState(true)
+
+  // 그룹 상태 최적화를 위해 주석 처리함
+  // const [groups, setGroups]             = useState([])
+  // const [groupLoading, setGroupLoading] = useState(true)
   const [groupCreateOpen, setGroupCreateOpen] = useState(false)
   const [activeGroup, setActiveGroup]   = useState(null)
   // 그룹 드래그 순서 변경
@@ -224,18 +226,28 @@ export default function MainPage() {
   }
   // --------------------------------------------그룹 실시간 갱신 수정 코드---------------------------------------------
   // 그룹 목록 재조회
-  const fetchGroups = useCallback(async () => {
-    if (!fingerprint) return
-    try {
-      setGroupLoading(true)
-      const data = await getMyGroups(fingerprint)
-      setGroups(data)
-    } catch (error) {
-      console.error('그룹 목록 조회 실패:', error)
-    } finally {
-      setGroupLoading(false)
-    }
-  }, [fingerprint])
+  // 그룹 상태 최적화를 위해 주석 처리함
+  // const fetchGroups = useCallback(async () => {
+  //   if (!fingerprint) return
+  //   try {
+  //     setGroupLoading(true)
+  //     const data = await getMyGroups(fingerprint)
+  //     setGroups(data)
+  //   } catch (error) {
+  //     console.error('그룹 목록 조회 실패:', error)
+  //   } finally {
+  //     setGroupLoading(false)
+  //   }
+  // }, [fingerprint])
+
+  // 그룹 상태 최적화 코드
+  // 그룹 생성/수정 후 갱신이 필요한 곳에서는 fetchGroups() 대신 refetchGroups() 호출
+  const { data: groups = [], isLoading: groupLoading, refetch: refetchGroups } = useQuery({
+    queryKey: ['groups', fingerprint],
+    queryFn: () => getMyGroups(fingerprint),
+    enabled: !!fingerprint,
+    staleTime: 1000 * 60,  // 그룹은 1분 캐시
+  })
 
   // 드래그 관련 상태
   const [raidOrder, setRaidOrder] = useState([])
@@ -398,8 +410,8 @@ export default function MainPage() {
   // 그룹 목록 조회 실시간 갱신용
   useEffect(() => {
     if (!fingerprint) return
-    fetchGroups()
-  }, [fingerprint, fetchGroups])
+    refetchGroups()
+  }, [fingerprint, refetchGroups])
 
   /* ── Supabase Realtime 구독 ──────────────── */
   // raid_members, raid_slots, raids 테이블 변경 시 즉시 갱신
@@ -568,7 +580,7 @@ export default function MainPage() {
       supabase.removeChannel(groupsChannel)
       supabase.removeChannel(groupMembersChannel)
     }   
-  }, [fingerprint, fetchGroups])
+  }, [fingerprint, refetchGroups])
 
   /* ── 드래그 앤 드롭 핸들러 ────────────────── */
   const handleDragStart = (index) => {
