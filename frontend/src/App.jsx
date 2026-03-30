@@ -70,18 +70,18 @@ function AppRoutes(){
         {/* path="/" : 메인 URL일 때 MainPage 컴포넌트 표시 */}
         <Route index element={<MainPage />} />
 
-        <Route path="/raids/new" element={<RaidNewPage />} />
+        <Route path="raids/new" element={<RaidNewPage />} />
 
         {/* path="/raids/:id" : 레이드 상세 및 파티 배치 페이지 */}
-        <Route path="/raids/:id" element={<RaidDetailPage />} />
+        <Route path="raids/:id" element={<RaidDetailPage />} />
 
         {/* 헤더에 있는 랭킹, 거래소, 떠돌이 상인 페이지 */}
-        <Route path="/ranking" element={<RankingPage />} />
-        <Route path="/market" element={<MarketPage />} />
-        <Route path="/merchants" element={<MerchantPage />} />
+        <Route path="ranking" element={<RankingPage />} />
+        <Route path="market" element={<MarketPage />} />
+        <Route path="merchants" element={<MerchantPage />} />
 
         {/* 캐릭터 상세 페이지  */}
-        <Route path="/characters/:name" element={<CharacterDetailPage />} />
+        <Route path="characters/:name" element={<CharacterDetailPage />} />
       </Route>
 
       {/* path="*" : 위에서 매칭되지 않은 모든 URL (ex. /asdfgh) */}
