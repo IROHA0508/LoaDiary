@@ -17,8 +17,7 @@ const DIFF_COLORS = {
 };
 
 // 백엔드 URL 추가
-const BACKEND_URL = import.meta.env.VITE_API_BASE_URL
-BACKEND_URL = BACKEND_URL.replace(/\/+$/, ""); // 끝 슬래시 제거
+const BACKEND_URL = import.meta.env.VITE_API_BASE_URL.replace(/\/+$/, ""); // 끝 슬래시 제거
 
 /* ─────────────────────────────────────────────
    API 함수
@@ -37,7 +36,7 @@ const API = {
 
   // 내 캐릭터 목록 조회
   getMyCharacters: (fingerprint) =>
-    fetch(`/api/characters/${fingerprint}`).then((r) => r.json()),
+    fetch(`${BACKEND_URL}/api/characters/${fingerprint}`).then((r) => r.json()),
 
   // 슬롯에 캐릭터 배치
   addSlot: (raidId, payload) =>
@@ -56,7 +55,7 @@ const API = {
 
   // 멤버 목록 조회 (유저 정보 + 원정대 캐릭터)
   getMembers: (raidId) =>
-    fetch(`/api/raids/${raidId}/members`).then((r) => r.json()),
+    fetch(`${BACKEND_URL}/api/raids/${raidId}/members`).then((r) => r.json()),
 
   // 멤버 등록 (대표 캐릭터명으로)
   addMember: (raidId, representative, fingerprint) =>
@@ -86,7 +85,7 @@ const API = {
 
   // 주간 중복 참여 슬롯 조회
   getWeeklyUsedSlots: (raidType, weekStart) =>
-    fetch(`/api/raids/weekly-used-slots?raid_type=${raidType}&week_start=${encodeURIComponent(weekStart)}`)
+    fetch(`${BACKEND_URL}/api/raids/weekly-used-slots?raid_type=${raidType}&week_start=${encodeURIComponent(weekStart)}`)
       .then((r) => r.json()),
 };
 
