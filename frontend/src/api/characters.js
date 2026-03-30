@@ -1,4 +1,4 @@
-import client from './client'
+import client, { slowClient } from './client'
  
 // 내 캐릭터 목록 조회
 export const getCharacters = (fingerprint) => client.get(`/api/characters/${fingerprint}`).then(r => r.data)
