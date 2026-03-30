@@ -36,17 +36,21 @@ export default function OnboardingPage(){
       // 유저 생성 및 기존 유저 조회
       setLoadingMsg('유저 정보 확인 중...')
       await createOrGetUser(fingerprint, representative.trim())
+    } catch (err) {
+      setError('서비스 오류가 발생했어요. 잠시 후 다시 시도해주세요.')
+      setLoading(false)
+      return
+    }
 
+    try{
       // 로스트아크 API 호출 이후 캐릭터 동기화
       setLoadingMsg('캐릭터 목록 불러오는 중...')  // ← 가장 오래 걸리는 구간
       await syncCharacters(fingerprint, representative.trim())
-
-      navigate('/')
     } catch (err){
       setError('캐릭터를 찾을 수 없어요. 캐릭터명을 다시 확인해주세요.')
-    } finally {
-      setLoading(false)
-    }
+      console.warn('캐릭터 동기화 실패 (메인에서 재시도 가능):', err.message)
+    } 
+      navigate('/')
   }
 
   return (
