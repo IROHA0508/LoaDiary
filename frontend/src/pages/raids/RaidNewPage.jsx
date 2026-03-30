@@ -178,7 +178,7 @@ const RAIDS = [
   {
     id: "gate_paradise", category: "abyss_dungeon",
     name: "낙원의 문", gates: 2, image: "🚪",
-    difficulties: ["노말"], maxSlots: 4,
+    difficulties: ["노말"], maxSlots: 8,
     entryLevel: { 노말: 960 },
   },
   {

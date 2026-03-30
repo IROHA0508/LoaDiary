@@ -835,7 +835,7 @@ export default function MainPage() {
 
             {/* 레이드 목록 */}
             {raidLoading ? (
-              <div className="px-4 py-5 text-sm text-gray-500">불러오는 중...</div>
+              <div className="flex items-center justify-center h-full px-4 py-5 text-sm text-gray-500">불러오는 중...</div>
             ) : raids.length === 0 ? (
               <div className="flex flex-col items-center justify-center text-center" style={{ height: `${RAID_SECTION_MAX_HEIGHT}px` }}>
                 <p className="text-sm text-gray-500">참여 중인 레이드가 없어요.</p>

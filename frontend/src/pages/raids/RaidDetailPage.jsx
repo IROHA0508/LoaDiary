@@ -894,7 +894,7 @@ export default function RaidDetailPage() {
                         <div style={styles.charGroupLabel}>{member.representative}</div>
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 3, minHeight: 16 }}>
                           {isRecent && (
-                            <span style={styles.autoLoadedBadge}>최근 이용한 원정대</span>
+                            <span style={styles.autoLoadedBadge}>최근 검색한 원정대</span>
                           )}
                           {groupNames.map(name => (
                             <span key={name} style={styles.groupNameBadge}>{name}</span>
