@@ -205,11 +205,9 @@ export default function GroupModal({ group, onClose, onUpdated, onDeleted }) {
       <div
         className="fixed inset-0 z-50 flex items-center justify-center"
         style={{ background: 'rgba(0,0,0,0.65)' }}
-        onClick={onClose}
       >
         <div
           className="relative w-full max-w-md mx-4 bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl overflow-hidden"
-          onClick={e => e.stopPropagation()}
         >
           {/* ── 헤더 ── */}
           <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800">

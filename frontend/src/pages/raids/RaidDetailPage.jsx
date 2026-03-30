@@ -159,6 +159,7 @@ export default function RaidDetailPage() {
   const [autoLoadedReps, setAutoLoadedReps] = useState(new Set());
   const [recentMemberReps, setRecentMemberReps] = useState(new Set());
   const [myGroups, setMyGroups] = useState([]);
+  const [myRepresentative, setMyRepresentative] = useState(null);
   const [weeklyUsedCharIds, setWeeklyUsedCharIds] = useState(new Set());
   const [editModal, setEditModal] = useState(false);
   const [editForm, setEditForm] = useState({ difficulty: "", max_slots: 8 });
@@ -220,9 +221,24 @@ export default function RaidDetailPage() {
       )
       .subscribe();
 
+    // raids 테이블 구독: is_completed 등 레이드 정보 변경 시 실시간 반영
+    const raidInfoChannel = supabase
+      .channel(`raid_info:${raidId}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "raids", filter: `id=eq.${raidId}` },
+        (payload) => {
+          if (payload.new) {
+            setRaid((prev) => prev ? { ...prev, ...payload.new } : payload.new);
+          }
+        }
+      )
+      .subscribe();
+
     return () => {
       supabase.removeChannel(slotsChannel);
       supabase.removeChannel(membersChannel);
+      supabase.removeChannel(raidInfoChannel);
     };
   }, [raidId]);
 
@@ -247,6 +263,7 @@ export default function RaidDetailPage() {
         setMyGroups(groupsData);
 
         const myRepresentative = myUserData?.representative ?? null;
+        setMyRepresentative(myRepresentative);
 
         const groupMemberOrder = [];
         groupsData.forEach(group => {
@@ -358,7 +375,7 @@ export default function RaidDetailPage() {
     e.dataTransfer.effectAllowed = "move";
   };
 
-  // ── 슬롯 드롭: API 없이 pendingSlots만 즉시 업데이트 ──
+  // ── 슬롯 드롭: 빈 슬롯이면 이동, 채워진 슬롯이면 swap ──
   const onSlotDrop = (e, targetSlotOrder) => {
     e.preventDefault();
     if (!dragCharId) return;
@@ -367,21 +384,35 @@ export default function RaidDetailPage() {
     if (dragSlotId && existingInTarget?.id === dragSlotId) return;
 
     const char = allCharacters.find((c) => c.id === dragCharId);
-    const tempId = `temp-${Date.now()}`;
+    const now = Date.now();
 
     setPendingSlots((prev) => {
       let next = [...prev];
-      if (dragSlotId)       next = next.filter((s) => s.id !== dragSlotId);
-      if (existingInTarget) next = next.filter((s) => s.id !== existingInTarget.id);
-      next.push({
-        id: tempId,
-        character_id: dragCharId,
-        slot_order: targetSlotOrder,
-        character_name: char?.name ?? null,
-        class_name: char?.class_name ?? null,
-        is_support: char?.is_support ?? null,
-        role: null,
-      });
+
+      // 슬롯 → 채워진 슬롯: swap
+      if (dragSlotId && existingInTarget) {
+        const sourceSlot = next.find((s) => s.id === dragSlotId);
+        const sourceOrder = sourceSlot?.slot_order ?? 0;
+        next = next.map((s) => {
+          if (s.id === dragSlotId)          return { ...s, slot_order: targetSlotOrder, id: `temp-${now}-a` };
+          if (s.id === existingInTarget.id) return { ...s, slot_order: sourceOrder,     id: `temp-${now}-b` };
+          return s;
+        });
+      } else {
+        // 슬롯 → 빈 슬롯 이동 또는 캐릭터 패널 → 슬롯
+        if (dragSlotId)       next = next.filter((s) => s.id !== dragSlotId);
+        if (existingInTarget) next = next.filter((s) => s.id !== existingInTarget.id);
+        next.push({
+          id: `temp-${now}`,
+          character_id: dragCharId,
+          slot_order: targetSlotOrder,
+          character_name: char?.name ?? null,
+          class_name: char?.class_name ?? null,
+          is_support: char?.is_support ?? null,
+          role: null,
+        });
+      }
+
       return next;
     });
 
@@ -853,7 +884,7 @@ export default function RaidDetailPage() {
               </div>
 
               {/* 멤버별 원정대 컬럼 */}
-              {members.map((member) => {
+              {members.filter(member => member.representative !== myRepresentative).map((member) => {
                 const groupNames = getGroupNamesForMember(member.representative);
                 const isRecent   = recentMemberReps.has(member.representative);
                 return (

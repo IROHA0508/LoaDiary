@@ -6,6 +6,8 @@ import { getCharacters, syncAll } from '../api/characters'
 import { getMyRaids, getJoinedRaids, deleteRaid, getSlots } from '../api/raids'
 import { useUser } from '../hooks/useUser'
 import { supabase } from '../lib/supabase'
+import { getUser } from '../api/users'
+import client from '../api/client'
 import GroupModal from '../components/GroupModal'
 import GroupCreateModal from '../components/GroupCreateModal'
 import { getMyGroups, reorderGroups } from '../api/groups'
@@ -86,7 +88,7 @@ const SYNERGY_META = {
   방깎:     { label: '방깎',   bg: 'rgba(239,68,68,0.15)',   border: 'rgba(239,68,68,0.4)',   text: '#f87171' },
   피증:     { label: '피증',   bg: 'rgba(96,165,250,0.15)',  border: 'rgba(96,165,250,0.4)',  text: '#60a5fa' },
   // 방향성피증: { label: '방향피증', bg: 'rgba(34,211,238,0.12)', border: 'rgba(34,211,238,0.35)', text: '#22d3ee' },
-  워블:     { label: '피증 + 방향성피증', bg: 'rgba(34,211,238,0.12)', border: 'rgba(34,211,238,0.35)', text: '#22d3ee' },
+  워블:     { label: '피증 + 방향피증', bg: 'rgba(34,211,238,0.12)', border: 'rgba(34,211,238,0.35)', text: '#22d3ee' },
   치적:     { label: '치적',   bg: 'rgba(251,191,36,0.15)',  border: 'rgba(251,191,36,0.4)',  text: '#fbbf24' },
   치피증:   { label: '치피증', bg: 'rgba(249,115,22,0.15)',  border: 'rgba(249,115,22,0.4)',  text: '#fb923c' },
   공증:     { label: '공증',   bg: 'rgba(34,197,94,0.15)',   border: 'rgba(34,197,94,0.4)',   text: '#4ade80' },
@@ -216,6 +218,13 @@ export default function MainPage() {
   const groupDragIdx  = useRef(null)
   const groupDragOver = useRef(null)
 
+  // 현재 로그인 유저의 DB user_id (created_by 비교용)
+  const [myUserId, setMyUserId] = useState(null)
+  useEffect(() => {
+    if (!fingerprint) return
+    getUser(fingerprint).then(u => setMyUserId(u?.id ?? null)).catch(() => {})
+  }, [fingerprint])
+
   const handleCharSearch = (e) => {
     e.preventDefault()
     const name = charSearch.trim()
@@ -260,8 +269,8 @@ export default function MainPage() {
   // 레이드별 슬롯 데이터: { [raidId]: [{slot_order, ...}] }
   const [slotsMap, setSlotsMap] = useState({})
 
-  // ── [수정 1·3·4] 완료된 레이드 ID Set ──────────
-  const [completedRaids, setCompletedRaids] = useState(new Set())
+  // ── 완료된 레이드 ID Set ── DB의 is_completed 필드 기준
+  // (별도 로컬 state 없이 rawRaids에서 직접 파생)
 
   /* ── 데이터 조회 ──────────────────────────── */
   const { data: characters = [], isLoading: charLoading } = useQuery({
@@ -332,14 +341,14 @@ export default function MainPage() {
     ? raidOrder.map(id => rawRaids.find(r => r.id === id)).filter(Boolean)
     : rawRaids
 
-  // ── [수정 3] 완료된 레이드는 항상 맨 아래로 ──
+  // ── 완료된 레이드는 항상 맨 아래로 (DB is_completed 기준) ──
   const raids = [
-    ...baseRaids.filter(r => !completedRaids.has(r.id)),
-    ...baseRaids.filter(r => completedRaids.has(r.id)),
+    ...baseRaids.filter(r => !r.is_completed),
+    ...baseRaids.filter(r =>  r.is_completed),
   ]
 
-  // ── [수정 1] 완료 개수 ──────────────────────
-  const completedCount = completedRaids.size
+  // 완료 개수
+  const completedCount = rawRaids.filter(r => r.is_completed).length
 
   // raids가 확정되면 각 레이드의 슬롯 일괄 조회
   // rawRaids가 바뀔 때마다 새 레이드의 슬롯만 추가 조회
@@ -388,8 +397,17 @@ export default function MainPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['myRaids', fingerprint] })
       queryClient.invalidateQueries({ queryKey: ['joinedRaids', fingerprint] })
-
       queryClient.refetchQueries({ queryKey: ['myRaids', fingerprint] })
+      queryClient.refetchQueries({ queryKey: ['joinedRaids', fingerprint] })
+      setRaidToDelete(null)
+    },
+  })
+
+  /* ── 레이드 나가기 (참여 중인 레이드에서 본인 제거) ── */
+  const leaveMutation = useMutation({
+    mutationFn: (raidId) => client.delete(`/api/raids/${raidId}/members/${myUserId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['joinedRaids', fingerprint] })
       queryClient.refetchQueries({ queryKey: ['joinedRaids', fingerprint] })
       setRaidToDelete(null)
     },
@@ -490,21 +508,14 @@ export default function MainPage() {
       )
       .subscribe()
 
-    // raids 변경 구독 → 레이드 생성/삭제 시 목록 갱신
+    // raids 변경 구독 → 레이드 생성/삭제/is_completed 변경 시 목록 갱신
     const raidsChannel = supabase
       .channel('mainpage_raids')
       .on('postgres_changes', {
         event: '*',
         schema: 'public',
         table: 'raids',
-      }, 
-      // () => {
-      //   queryClient.invalidateQueries({ queryKey: ['myRaids', fingerprint] })
-      //   queryClient.invalidateQueries({ queryKey: ['joinedRaids', fingerprint] })
-
-      //   queryClient.refetchQueries({ queryKey: ['myRaids', fingerprint] })
-      //   queryClient.refetchQueries({ queryKey: ['joinedRaids', fingerprint] })
-      // }
+      },
       debouncedRefetchRaidLists
       )
       .subscribe()
@@ -536,7 +547,7 @@ export default function MainPage() {
     const debounceFetchGroups = () => {
       if (groupFetchTimer) clearTimeout(groupFetchTimer)
       groupFetchTimer = setTimeout(() => {
-        fetchGroups()
+        refetchGroups()
       },120)
     }
     const groupsChannel = supabase
@@ -662,21 +673,32 @@ export default function MainPage() {
     catch { /* 실패 시 그대로 유지 (재조회 불필요) */ }
   }
   const handleGroupDragEnd = () => { groupDragIdx.current = null; groupDragOver.current = null }
-  /* ── 내가 만든 레이드 여부 ────────────────── */
-  const isMyRaid = (raidId) => myRaids.some(r => r.id === raidId)
+  /* ── 내가 만든 레이드 여부: created_by가 본인인 경우만 true ── */
+  const isMyRaid = (raidId) => {
+    const raid = rawRaids.find(r => r.id === raidId)
+    return raid?.created_by === myUserId
+  }
 
-  /* ── [수정 2] 완료 토글 ─────────────────── */
-  const toggleCompleted = (e, raidId) => {
+  /* ── 완료 토글: DB 업데이트 + 낙관적 업데이트 ── */
+  const toggleCompleted = async (e, raidId) => {
     e.stopPropagation()
-    setCompletedRaids(prev => {
-      const next = new Set(prev)
-      if (next.has(raidId)) {
-        next.delete(raidId)
-      } else {
-        next.add(raidId)
-      }
-      return next
-    })
+    const targetRaid = rawRaids.find(r => r.id === raidId)
+    if (!targetRaid) return
+    const newValue = !targetRaid.is_completed
+
+    // 낙관적 업데이트: 두 쿼리 캐시 모두 즉시 반영
+    const updater = (prev = []) => prev.map(r => r.id === raidId ? { ...r, is_completed: newValue } : r)
+    queryClient.setQueryData(['myRaids',     fingerprint], updater)
+    queryClient.setQueryData(['joinedRaids', fingerprint], updater)
+
+    try {
+      await client.patch(`/api/raids/${raidId}`, { is_completed: newValue })
+    } catch {
+      // 실패 시 롤백
+      const rollback = (prev = []) => prev.map(r => r.id === raidId ? { ...r, is_completed: !newValue } : r)
+      queryClient.setQueryData(['myRaids',     fingerprint], rollback)
+      queryClient.setQueryData(['joinedRaids', fingerprint], rollback)
+    }
   }
 
   return (
@@ -833,7 +855,7 @@ export default function MainPage() {
                 }}
               >
                 {raids.map((raid, index) => {
-                  const isDone = completedRaids.has(raid.id)
+                  const isDone = !!raid.is_completed
                   const raidSlots = (slotsMap[raid.id] || []).slice().sort((a, b) => a.slot_order - b.slot_order)
 
                   // 파티 구조 생성 (4인 1파티)
@@ -1222,11 +1244,20 @@ export default function MainPage() {
                 취소
               </button>
               <button
-                onClick={() => deleteMutation.mutate(raidToDelete.id)}
-                disabled={deleteMutation.isPending}
+                onClick={() => {
+                  if (isMyRaid(raidToDelete.id)) {
+                    deleteMutation.mutate(raidToDelete.id)
+                  } else {
+                    leaveMutation.mutate(raidToDelete.id)
+                  }
+                }}
+                disabled={deleteMutation.isPending || leaveMutation.isPending}
                 className="flex-1 px-4 py-2 text-sm font-semibold text-white bg-red-600 hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
               >
-                {deleteMutation.isPending ? '처리 중...' : (isMyRaid(raidToDelete.id) ? '삭제' : '나가기')}
+                {(deleteMutation.isPending || leaveMutation.isPending)
+                  ? '처리 중...'
+                  : (isMyRaid(raidToDelete.id) ? '삭제' : '나가기')
+                }
               </button>
             </div>
           </div>

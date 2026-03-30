@@ -107,8 +107,15 @@ def create_group(payload: GroupCreate):
     if not result.data:
         raise HTTPException(status_code=500, detail="그룹 생성에 실패했습니다.")
     g = result.data[0]
-    g["members"] = []
-    return g
+
+    # 그룹 생성자를 자동으로 첫 번째 멤버로 추가
+    supabase.table("group_members").insert({
+        "group_id": g["id"],
+        "user_id": user_id,
+        "sort_order": 0,
+    }).execute()
+
+    return _build_group_with_members(g)
 
 
 @router.patch("/{group_id}")
