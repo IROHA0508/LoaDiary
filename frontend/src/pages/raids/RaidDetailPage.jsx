@@ -168,7 +168,7 @@ export default function RaidDetailPage() {
   const [raid, setRaid] = useState(null);
   const [slots, setSlots] = useState([]); // [{id, character_id, slot_order, role}]
   const [myCharacters, setMyCharacters] = useState([]);
-   const [members, setMembers] = useState([]); // [{user_id, representative, characters}]
+  const [members, setMembers] = useState([]); // [{user_id, representative, characters}]
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [dragCharId, setDragCharId] = useState(null); // 드래그 중인 캐릭터 id
@@ -264,7 +264,7 @@ export default function RaidDetailPage() {
 
     const load = async () => {
       try {
-        const [raidData, slotsData, charsData, membersData] = await Promise.all([
+        const [raidData, slotsData, charsData, groupsData] = await Promise.all([
           API.getRaid(raidId),
           API.getSlots(raidId),
           API.getMyCharacters(fingerprint),
@@ -274,7 +274,18 @@ export default function RaidDetailPage() {
         setRaid(raidData);
         setSlots(slotsData);
         setMyCharacters(charsData);
-        setMembers(membersData);
+        setMyGroups(groupsData);
+
+        // ── 그룹 내 원정대 순서 계산 ──────────────────────────
+        // 그룹 슬롯 순서 → 그룹 내 멤버 sort_order 순으로 flatten
+        const groupMemberOrder = [];
+        groupsData.forEach(group => {
+          group.members.forEach(m => {
+            if (!groupMemberOrder.includes(m.representative)) {
+              groupMemberOrder.push(m.representative);
+            }
+          });
+        });
 
         // ── 최근 멤버 + 그룹 멤버 자동 로드 ──────────────────
         const recentReps = loadRecentMembers();
@@ -285,6 +296,7 @@ export default function RaidDetailPage() {
           ...recentReps.filter(r => !existingReps.has(r)),
           ...groupMemberOrder.filter(r => !existingReps.has(r) && !recentReps.includes(r)),
         ];
+        
         const autoLoaded = new Set();
         for (const rep of toAutoLoad) {
           try {
