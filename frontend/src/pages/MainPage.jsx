@@ -191,6 +191,8 @@ const SynergyBadge = ({ tag, faded }) => {
    메인 페이지
    ───────────────────────────────────────────── */
 export default function MainPage() {
+  // 디버그용 렌더링 확인용 로그
+  console.log('MainPage render', window.location.pathname)
   const { fingerprint } = useUser()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
