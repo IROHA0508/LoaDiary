@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
+import { flushSync } from 'react-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { getCharacters, syncAll } from '../api/characters'
@@ -290,10 +291,10 @@ export default function MainPage() {
   const raidLoading = myRaidsLoading || joinedRaidsLoading
 
   // 중복 제거 후 합치기
-  const rawRaids = [
+  const rawRaids = useMemo(() => [
     ...myRaids,
     ...joinedRaids.filter(jr => !myRaids.some(mr => mr.id === jr.id))
-  ]
+  ], [myRaids, joinedRaids])
 
   // rawRaids 변경 시 raidOrder를 현재 목록과 동기화
   // - 새로 추가된 레이드는 맨 앞으로 자동 추가
@@ -308,6 +309,8 @@ export default function MainPage() {
       // 새로 들어온 레이드 id 추가
       const added = rawIds.filter(id => !kept.includes(id))
 
+      // 변경사항이 없으면 prev 그대로 반환 → React가 re-render 생략
+      if (added.length === 0 && kept.length === prev.length) return prev
       return [...added, ...kept]
     })
   }, [rawRaids])
@@ -789,7 +792,7 @@ export default function MainPage() {
                 )}
               </div>
               <button
-                onClick={() => navigate('/raids/new')}
+                onClick={() => flushSync(() => navigate('/raids/new'))}
                 className="text-xs text-gray-400 px-3 py-1 border border-gray-700 rounded-md hover:bg-gray-800 hover:text-white transition-colors"
               >
                 + 레이드 생성
@@ -803,7 +806,7 @@ export default function MainPage() {
               <div className="flex flex-col items-center justify-center text-center" style={{ height: `${RAID_SECTION_MAX_HEIGHT}px` }}>
                 <p className="text-sm text-gray-500">참여 중인 레이드가 없어요.</p>
                 <button
-                  onClick={() => navigate('/raids/new')}
+                  onClick={() => flushSync(() => navigate('/raids/new'))}
                   className="mt-3 text-sm text-blue-400 hover:text-blue-300"
                 >
                   첫 레이드 만들기 →
@@ -855,23 +858,23 @@ export default function MainPage() {
                   return (
                     <div
                       key={raid.id}
-                      draggable
                       onDragStart={() => handleDragStart(index)}
                       onDragOver={(e) => handleDragOver(e, index)}
                       onDrop={handleDrop}
                       onDragEnd={handleDragEnd}
-                      onClick={() => navigate(`/raids/${raid.id}`)}
+                      onClick={() => flushSync(() => navigate(`/raids/${raid.id}`))}
                       className={`border-b border-gray-800 last:border-b-0 transition-colors group cursor-pointer ${
                         isDone
-                          ? 'bg-gray-800/30 hover:bg-gray-800/40 opacity-60'
-                          : 'hover:bg-gray-800/50'
+                        ? 'bg-gray-800/30 hover:bg-gray-800/40 opacity-60'
+                        : 'hover:bg-gray-800/50'
                       }`}
-                    >
+                      >
                       {/* ── 메인 정보 행 ── */}
                       <div className="flex items-center gap-3 px-4 py-3">
 
                         {/* 드래그 핸들 */}
                         <div
+                          draggable
                           onClick={(e) => e.stopPropagation()}
                           className="opacity-30 group-hover:opacity-70 transition-opacity"
                         >
@@ -950,7 +953,7 @@ export default function MainPage() {
                           </span>
                         )}
 
-                                          {/* 삭제 / 나가기 버튼 */}
+                        {/* 삭제 / 나가기 버튼 */}
                         <button
                           onClick={(e) => {
                             e.stopPropagation()
@@ -1014,8 +1017,8 @@ export default function MainPage() {
                                   <>
                                     <span className="w-px h-3 bg-gray-700/80 flex-shrink-0 mx-0.5" />
                                     <div className="flex items-center gap-1">
-                                      {synergies.map(tag => (
-                                        <SynergyBadge key={tag} tag={tag} faded={isDone} />
+                                      {synergies.map((tag, i) => (
+                                        <SynergyBadge key={`${tag}-${i}`} tag={tag} faded={isDone} />
                                       ))}
                                     </div>
                                   </>
