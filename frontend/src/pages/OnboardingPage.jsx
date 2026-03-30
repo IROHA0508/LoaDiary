@@ -90,7 +90,7 @@ export default function OnboardingPage(){
                 // onChange : 타이핑할 때마다 실행
                 // e.target.value : 입력창에 타이핑한 값
                 onChange={(e) => setRepresentative(e.target.value)}
-                placeholder="캐릭터명 입력"
+                placeholder="대표 캐릭터명 입력"
                 className="w-full bg-gray-800 text-white rounded-lg px-4 py-3 border border-gray-700 focus:outline-none focus:border-blue-500 placeholder-gray-600"
               />
             </div>

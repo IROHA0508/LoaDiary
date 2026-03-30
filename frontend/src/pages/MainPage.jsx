@@ -1237,8 +1237,9 @@ export default function MainPage() {
         <GroupCreateModal
           fingerprint={fingerprint}
           onClose={() => setGroupCreateOpen(false)}
+          // 수정
           onCreated={(newGroup) => {
-            setGroups(prev => [...prev, newGroup])
+            queryClient.setQueryData(['groups', fingerprint], (prev = []) => [...prev, newGroup])
             setGroupCreateOpen(false)
           }}
         />
@@ -1248,12 +1249,17 @@ export default function MainPage() {
         <GroupModal
           group={activeGroup}
           onClose={() => setActiveGroup(null)}
+          // 수정
           onUpdated={(updated) => {
-            setGroups(prev => prev.map(g => g.id === updated.id ? updated : g))
+            queryClient.setQueryData(['groups', fingerprint], (prev = []) =>
+              prev.map(g => g.id === updated.id ? updated : g)
+            )
             setActiveGroup(updated)
           }}
           onDeleted={(deletedId) => {
-            setGroups(prev => prev.filter(g => g.id !== deletedId))
+            queryClient.setQueryData(['groups', fingerprint], (prev = []) =>
+              prev.filter(g => g.id !== deletedId)
+            )
             setActiveGroup(null)
           }}
         />

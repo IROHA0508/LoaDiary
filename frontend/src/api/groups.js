@@ -1,4 +1,4 @@
-import client from './client'
+import client, { slowClient } from './client'
 
 export const getMyGroups = (fingerprint) =>
   client.get(`/api/groups/${fingerprint}`).then(r => r.data)
@@ -17,8 +17,9 @@ export const reorderGroups = (fingerprint, groupIds) =>
 export const deleteGroup = (groupId) =>
   client.delete(`/api/groups/${groupId}`)
 
+// LoA API 내부 호출 포함 → slowClient (60초 timeout)
 export const addGroupMember = (groupId, representative) =>
-  client.post(`/api/groups/${groupId}/members`, { representative }).then(r => r.data)
+  slowClient.post(`/api/groups/${groupId}/members`, { representative }).then(r => r.data)
 
 // 멤버 순서 변경
 export const reorderGroupMembers = (groupId, memberIds) =>

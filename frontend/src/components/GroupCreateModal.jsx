@@ -49,8 +49,11 @@ export default function GroupCreateModal({ fingerprint, onClose, onCreated }) {
     if (creating) return
     setCreating(true)
     setAddError('')
+
+    let latestGroup = null
+
     try {
-      let latestGroup = await createGroup(fingerprint, groupName.trim() || null)
+      latestGroup = await createGroup(fingerprint, groupName.trim() || null)
       // 멤버 추가 — 각 응답이 최신 그룹 전체를 반환하므로 마지막 응답을 사용
       for (const m of pendingMembers) {
         try {
@@ -58,12 +61,14 @@ export default function GroupCreateModal({ fingerprint, onClose, onCreated }) {
           if (updated) latestGroup = updated  // 최신 상태로 계속 갱신
         } catch {}
       }
-      onCreated(latestGroup)  // 멤버가 모두 반영된 최신 그룹 전달
-      onClose()
-    } catch {
+    } catch{
       setAddError('그룹 생성에 실패했습니다.')
       setCreating(false)
+      return
     }
+    setCreating(false)
+    onCreated(latestGroup)  // 멤버가 모두 반영된 최신 그룹 전달
+    onClose()
   }
 
   return (
