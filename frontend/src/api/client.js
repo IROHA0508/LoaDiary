@@ -9,6 +9,15 @@ const client = axios.create({
   },
 })
 
+// LoA 외부 API를 거치는 느린 요청 전용 인스턴스
+// sync, sync-all, armory 등 외부 API 의존 엔드포인트에 사용
+export const slowClient = axios.create({
+  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000',
+  timeout: 120000, // 120초 (캐릭터 20개 기준 여유 있게)
+  headers: { 'Content-Type': 'application/json' },
+})
+
+
 // 응답 인터셉터: 에러를 일관되게 처리
 client.interceptors.response.use(
   (res) => res,

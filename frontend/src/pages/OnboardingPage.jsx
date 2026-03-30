@@ -14,6 +14,7 @@ export default function OnboardingPage(){
 
   // API 호출 중인지 나타내는 상태
   const [loading, setLoading] = useState(false)
+  const [loadingMsg, setLoadingMsg] = useState('')
 
   // 에러 메시지를 저장하는 상태
   const [error, setError] = useState(null)
@@ -33,10 +34,13 @@ export default function OnboardingPage(){
     
     try{
       // 유저 생성 및 기존 유저 조회
+      setLoadingMsg('유저 정보 확인 중...')
       await createOrGetUser(fingerprint, representative.trim())
 
       // 로스트아크 API 호출 이후 캐릭터 동기화
+      setLoadingMsg('캐릭터 목록 불러오는 중...')  // ← 가장 오래 걸리는 구간
       await syncCharacters(fingerprint, representative.trim())
+
       navigate('/')
     } catch (err){
       setError('캐릭터를 찾을 수 없어요. 캐릭터명을 다시 확인해주세요.')
@@ -94,8 +98,8 @@ export default function OnboardingPage(){
               disabled={loading || !representative.trim()}
               className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-500 text-white font-semibold py-3 rounded-lg transition-colors"
             >
-              {/* 삼항연산자 : loading이 true면 '불러오는 중...', false면 '캐릭터 불러오기' */}
-              {loading ? '불러오는 중...' : '캐릭터 불러오기'}
+              {/* 삼항연산자 : loading이 true면 '처리 중...', false면 '시작하기' */}
+              {loading ? loadingMsg || '처리 중...' : '시작하기'}
             </button>
           </form>
         </div>
