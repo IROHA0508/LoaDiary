@@ -43,13 +43,16 @@ function AppRoutes(){
         await getUser(fingerprint)
       } 
       // 유저가 없으면 온보딩 페이지로 이동 (404 에러 발생)      
-      catch{
-        navigate('/onboarding')
+      catch(e){
+        // 404일 때만 온보딩으로 이동 (네트워크 오류 등에는 반응 안 함)
+        if (e?.response?.status === 404) {
+          navigate('/onboarding')
+        }
       }
     }
 
     checkUser()
-  }, [fingerprint, loading])
+  }, [fingerprint, loading, navigate])
 
   // fingerprint 준비중일 때 로딩 화면 표시
   if (loading){

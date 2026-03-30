@@ -495,3 +495,13 @@ async def remove_member(raid_id: str, user_id: str):
  
   if not result.data:
     raise HTTPException(status_code=404, detail="해당 멤버를 찾을 수 없습니다.")
+  
+# 레이드 완료 토글 (완료 <-> 미완료)
+@router.patch("/{raid_id}/complete", response_model=RaidResponse)
+async def toggle_complete(raid_id: str):
+  raid = supabase.table("raids").select("is_completed").eq("id", raid_id).execute()
+  if not raid.data:
+    raise HTTPException(status_code=404)
+  new_val = not raid.data[0]["is_completed"]
+  result = supabase.table("raids").update({"is_completed": new_val}).eq("id", raid_id).execute()
+  return result.data[0]

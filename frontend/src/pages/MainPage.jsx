@@ -470,6 +470,7 @@ export default function MainPage() {
       (payload) => {
         const changedRaidId = payload.new?.raid_id ?? payload.old?.raid_id
         debouncedFetchRaidSlots(changedRaidId)
+        debouncedRefetchRaidLists()  // 추가: joinedRaids도 갱신
       }
       )
       .subscribe()

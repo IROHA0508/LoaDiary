@@ -3,6 +3,10 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useUser } from "../../hooks/useUser";
 import { supabase } from "../../lib/supabase";
 import { getMyGroups } from '../../api/groups'
+// BACKEND_URL 상수 및 raw fetch 제거하고, import 추가
+import client from '../../api/client'
+// 기존 raids.js 함수 재사용
+import { getSlots as _getSlots, addSlot as _addSlot, removeSlot as _removeSlot, deleteRaid as _deleteRaid } from '../../api/raids'
 
 /* ─────────────────────────────────────────────
    난이도 색상 (RaidNewPage와 동일)
@@ -20,73 +24,36 @@ const DIFF_COLORS = {
 const BACKEND_URL = import.meta.env.VITE_API_BASE_URL.replace(/\/+$/, ""); // 끝 슬래시 제거
 
 /* ─────────────────────────────────────────────
-   API 함수
+   API 함수 : raids.js 함수 재사용
    ───────────────────────────────────────────── */
 const API = {
-  // 레이드 단일 조회
   getRaid: (id) =>
-    fetch(`${BACKEND_URL}/api/raids/${id}`).then((r) => {
-      if (!r.ok) throw new Error("레이드를 찾을 수 없습니다.");
-      return r.json();
-    }),
-
-  // 슬롯 목록 조회
+    client.get(`/api/raids/${id}`).then((r) => r.data),
   getSlots: (raidId) =>
-    fetch(`${BACKEND_URL}/api/raids/${raidId}/slots`).then((r) => r.json()),
-
-  // 내 캐릭터 목록 조회
+    _getSlots(raidId),  // raids.js 함수 재사용
   getMyCharacters: (fingerprint) =>
-    fetch(`${BACKEND_URL}/api/characters/${fingerprint}`).then((r) => r.json()),
-
-  // 슬롯에 캐릭터 배치
+    client.get(`/api/characters/${fingerprint}`).then((r) => r.data),
   addSlot: (raidId, payload) =>
-    fetch(`${BACKEND_URL}/api/raids/${raidId}/slots`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    }).then((r) => {
-      if (!r.ok) return r.json().then((e) => { throw new Error(e.detail); });
-      return r.json();
-    }),
-
-  // 슬롯에서 캐릭터 제거
+    _addSlot(raidId, payload),  // raids.js 함수 재사용
   removeSlot: (slotId) =>
-    fetch(`${BACKEND_URL}/api/raids/slots/${slotId}`, { method: "DELETE" }),
-
-  // 멤버 목록 조회 (유저 정보 + 원정대 캐릭터)
+    _removeSlot(slotId),  // raids.js 함수 재사용
+  deleteRaid: (raidId) =>
+    _deleteRaid(raidId),  // raids.js 함수 재사용
   getMembers: (raidId) =>
-    fetch(`${BACKEND_URL}/api/raids/${raidId}/members`).then((r) => r.json()),
-
-  // 멤버 등록 (대표 캐릭터명으로)
+    client.get(`/api/raids/${raidId}/members`).then((r) => r.data),
   addMember: (raidId, representative, fingerprint) =>
-    fetch(`${BACKEND_URL}/api/raids/${raidId}/members?added_by=${fingerprint}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ representative }),
-    }).then((r) => {
-      if (!r.ok) return r.json().then((e) => { throw new Error(e.detail); });
-      return r.json();
-    }),
-
-  // 레이드 정보 수정
+    client.post(`/api/raids/${raidId}/members?added_by=${fingerprint}`, { representative })
+      .then((r) => r.data)
+      .catch((e) => { throw new Error(e.response?.data?.detail || e.message); }),
   updateRaid: (raidId, payload) =>
-    fetch(`${BACKEND_URL}/api/raids/${raidId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    }).then((r) => {
-      if (!r.ok) return r.json().then((e) => { throw new Error(e.detail); });
-      return r.json();
-    }),
-
-  // 멤버 제거
+    client.patch(`/api/raids/${raidId}`, payload)
+      .then((r) => r.data)
+      .catch((e) => { throw new Error(e.response?.data?.detail || e.message); }),
   removeMember: (raidId, userId) =>
-    fetch(`${BACKEND_URL}/api/raids/${raidId}/members/${userId}`, { method: "DELETE" }),
-
-  // 주간 중복 참여 슬롯 조회
+    client.delete(`/api/raids/${raidId}/members/${userId}`),
   getWeeklyUsedSlots: (raidType, weekStart) =>
-    fetch(`${BACKEND_URL}/api/raids/weekly-used-slots?raid_type=${raidType}&week_start=${encodeURIComponent(weekStart)}`)
-      .then((r) => r.json()),
+    client.get(`/api/raids/weekly-used-slots?raid_type=${raidType}&week_start=${encodeURIComponent(weekStart)}`)
+      .then((r) => r.data),
 };
 
 /* ─────────────────────────────────────────────
@@ -227,8 +194,12 @@ export default function RaidDetailPage() {
           filter: `raid_id=eq.${raidId}`,
         },
         async () => {
-          const updated = await API.getSlots(raidId);
-          setSlots(updated);
+          const [updatedSlots, updatedMembers] = await Promise.all([
+            API.getSlots(raidId),
+            API.getMembers(raidId),
+          ]);
+          setSlots(updatedSlots);
+          setMembers(updatedMembers);
         }
       )
       .subscribe();
@@ -639,7 +610,7 @@ export default function RaidDetailPage() {
                   style={styles.deleteBtn}
                   onClick={async () => {
                     if (!confirm("레이드를 삭제할까요?")) return;
-                    await fetch(`/api/raids/${raidId}`, { method: "DELETE" });
+                    await API.deleteRaid(raidId);
                     navigate("/");
                   }}
                 >
@@ -663,7 +634,15 @@ export default function RaidDetailPage() {
                   <div style={styles.slotsRow}>
                     {party.slots.map(({ slotOrder }) => {
                       const slot = getSlotAt(slotOrder);
-                      const char = slot ? getCharById(slot.character_id) : null;
+                      const char = slot
+                        ? (getCharById(slot.character_id) ?? {
+                            id: slot.character_id,
+                            name: slot.character_name,
+                            class_name: slot.class_name,
+                            is_support: slot.is_support,
+                            item_level: null,
+                          })
+                        : null;
 
                       return (
                         <div

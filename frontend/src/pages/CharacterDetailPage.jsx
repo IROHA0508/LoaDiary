@@ -4,18 +4,15 @@ import { useQuery } from '@tanstack/react-query'
 import { getCharacters } from '../api/characters'
 import { getMyRaids, getJoinedRaids, getSlots } from '../api/raids'
 import { useUser } from '../hooks/useUser'
-
-// 백엔드 URL 추가
-const BACKEND_URL = import.meta.env.VITE_API_BASE_URL.replace(/\/+$/, ""); // 끝 슬래시 제거
+import client from '../api/client'
 
 /* ─────────────────────────────────────────────
    API
    ───────────────────────────────────────────── */
 const fetchArmory = (name) =>
-  fetch(`${BACKEND_URL}/api/characters/${encodeURIComponent(name)}/armory`).then((r) => {
-    if (!r.ok) throw new Error('캐릭터 정보를 불러올 수 없습니다.')
-    return r.json()
-  })
+  client.get(`/api/characters/${encodeURIComponent(name)}/armory`)
+    .then((r) => r.data)
+    .catch(() => { throw new Error('캐릭터 정보를 불러올 수 없습니다.') })
 
 /* ─────────────────────────────────────────────
    상수 / 유틸
