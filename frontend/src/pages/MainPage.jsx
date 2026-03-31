@@ -6,7 +6,7 @@ import { getCharacters, syncAll } from '../api/characters'
 import { getMyRaids, getJoinedRaids, deleteRaid, getSlots } from '../api/raids'
 import { useUser } from '../hooks/useUser'
 import { supabase } from '../lib/supabase'
-import { getUser } from '../api/users'
+import { getUser, getRaidOrder, saveRaidOrder } from '../api/users'
 import client from '../api/client'
 import GroupModal from '../components/GroupModal'
 import GroupCreateModal from '../components/GroupCreateModal'
@@ -15,9 +15,6 @@ import { useCallback } from 'react'
 
 /* ─────────────────────────────────────────────
    레이드 섹션 레이아웃 상수
-   ───────────────────────────────────────────── */
-/* ─────────────────────────────────────────────
-   ✏️  레이드 섹션 레이아웃 — 이 두 값만 바꾸면 됩니다
    ───────────────────────────────────────────── */
 const RAID_SCROLL_THRESHOLD = 6   // 이 개수 이상이면 스크롤 활성화
 const RAID_SECTION_MAX_HEIGHT = 672  // 스크롤 활성화 시 섹션 최대 높이(px)
@@ -131,35 +128,24 @@ const CLASS_SYNERGY = {
   '가디언나이트': ['피증'],
 }
 
-// 파티 내 배치된 캐릭터들의 시너지 태그 집합을 계산
-// is_support === true 인 캐릭터(발키리-빛의기사, 도화가-만개, 바드-절실한구원, 홀리나이트-축복의오라 등)는
-// 서포터 빌드로 시너지를 제공하지 않으므로 제외
-// 시너지 겹치면 1개로 표시되는 코드 -> 수정
-// function calcPartySynergies(partySlots) {
-//   const synSet = new Set()
-//   partySlots.forEach(({ char }) => {
-//     if (!char?.class_name) return
-//     if (char.is_support === true) return   // 서포터 빌드 → 시너지 없음
-//     const tags = CLASS_SYNERGY[char.class_name] || []
-//     tags.forEach(t => synSet.add(t))
-//   })
-//   // 우선순위 순으로 정렬해서 반환
-//   return SYNERGY_ORDER.filter(s => synSet.has(s))
-// }
-
-// 시너지 겹쳐도 개수만큼 표시되는 코드
 function calcPartySynergies(partySlots) {
+  // 직업명 기준으로 중복 제거 후 시너지 수집
+  // → 같은 직업이 여러 명이어도 해당 시너지는 1번만 카운트
+  // → 다른 직업이 우연히 같은 시너지를 가지면 그만큼 표시
+  const seenClasses = new Set()
   const synergies = []
 
   partySlots.forEach(({ char }) => {
     if (!char?.class_name) return
-    if (char.is_support === true) return   // 서포터 빌드 → 시너지 없음
+    if (char.is_support === true) return
+    if (seenClasses.has(char.class_name)) return  // 이미 처리한 직업이면 스킵
+    seenClasses.add(char.class_name)
 
     const tags = CLASS_SYNERGY[char.class_name] || []
     tags.forEach(tag => synergies.push(tag))
   })
 
-  // 우선순위 순으로 정렬하되, 같은 시너지도 개수만큼 유지
+  // 우선순위 순으로 정렬
   return synergies.sort(
     (a, b) => SYNERGY_ORDER.indexOf(a) - SYNERGY_ORDER.indexOf(b)
   )
@@ -220,9 +206,13 @@ export default function MainPage() {
 
   // 현재 로그인 유저의 DB user_id (created_by 비교용)
   const [myUserId, setMyUserId] = useState(null)
+  const [myRepresentative, setMyRepresentative] = useState(null)
   useEffect(() => {
     if (!fingerprint) return
-    getUser(fingerprint).then(u => setMyUserId(u?.id ?? null)).catch(() => {})
+    getUser(fingerprint).then(u => {
+      setMyUserId(u?.id ?? null)
+      setMyRepresentative(u?.representative ?? null)  // 같은 응답에서 함께 저장
+    }).catch(() => {})
   }, [fingerprint])
 
   const handleCharSearch = (e) => {
@@ -260,12 +250,39 @@ export default function MainPage() {
 
   // 드래그 관련 상태
   const [raidOrder, setRaidOrder] = useState([])
-
-  // 레이드 목록 실시간 갱신을 위한 코드 수정 -> 주석 처리
-  // const [orderedRaids, setOrderedRaids] = useState([])
   const dragIndex = useRef(null)
   const dragOverIndex = useRef(null)
+  const raidOrderSaveTimer = useRef(null)  // 디바운스용 타이머
 
+  // fingerprint 확정 후 localStorage에서 저장된 순서 복원
+  useEffect(() => {
+    if (!fingerprint) return
+
+    // 1순위: API에서 저장된 순서 조회
+    getRaidOrder(fingerprint)
+      .then(order => {
+        if (Array.isArray(order) && order.length > 0) {
+          setRaidOrder(order)
+          // API 성공 시 localStorage도 동기화
+          localStorage.setItem(`raidOrder_${fingerprint}`, JSON.stringify(order))
+        } else {
+          // API에 저장된 순서가 없으면 localStorage 폴백
+          try {
+            const saved = JSON.parse(localStorage.getItem(`raidOrder_${fingerprint}`))
+            if (Array.isArray(saved) && saved.length > 0) setRaidOrder(saved)
+          } catch {}
+        }
+      })
+      .catch(() => {
+        // API 실패 시 localStorage 폴백
+        try {
+          const saved = JSON.parse(localStorage.getItem(`raidOrder_${fingerprint}`))
+          if (Array.isArray(saved) && saved.length > 0) setRaidOrder(saved)
+        } catch {}
+      })
+  }, [fingerprint])
+
+  
   // 레이드별 슬롯 데이터: { [raidId]: [{slot_order, ...}] }
   const [slotsMap, setSlotsMap] = useState({})
 
@@ -285,22 +302,6 @@ export default function MainPage() {
     queryFn: () => getMyRaids(fingerprint),
     enabled: !!fingerprint,
   })
-
-  // 내가 참여한 레이드
-  // 레이드 실시간 갱신을 위해 코드 수정
-  // const { data: joinedRaids = [], isLoading: joinedRaidsLoading } = useQuery({
-  //   queryKey: ['joinedRaids', fingerprint],
-  //   queryFn: () => getJoinedRaids(fingerprint),
-  //   enabled: !!fingerprint,
-  //   onSuccess: (data) => {
-  //     const merged = [
-  //       ...myRaids,
-  //       ...data.filter(jr => !myRaids.some(mr => mr.id === jr.id))
-  //     ]
-  //     setOrderedRaids(merged)
-  //     setRaidOrder(merged.map(r => r.id))
-  //   }
-  // })
 
   // 내가 참여한 레이드 실시간 갱신을 위한 새로운 코드
   const { data: joinedRaids = [], isLoading: joinedRaidsLoading } = useQuery({
@@ -412,18 +413,6 @@ export default function MainPage() {
       setRaidToDelete(null)
     },
   })
-
-  // 그룹 관련 useEffect
-
-  // 초기 그룹 목록 조회 코드 - 실시간 갱신을 위해 아래 코드로 변경
-  // useEffect(() => {
-  //   if (!fingerprint) return
-  //   setGroupLoading(true)
-  //   getMyGroups(fingerprint)
-  //     .then(setGroups)
-  //     .catch(() => {})
-  //     .finally(() => setGroupLoading(false))
-  // }, [fingerprint])
 
   // 그룹 목록 조회 실시간 갱신용
   useEffect(() => {
@@ -612,7 +601,22 @@ export default function MainPage() {
     const [moved] = newRaids.splice(from, 1)
     newRaids.splice(to, 0, moved)
 
-    setRaidOrder(newRaids.map(r => r.id))
+    const newOrder = newRaids.map(r => r.id)
+    setRaidOrder(newOrder)
+
+    if (fingerprint) {
+      // ① localStorage에 즉시 저장 (새로고침 대비)
+      localStorage.setItem(`raidOrder_${fingerprint}`, JSON.stringify(newOrder))
+
+      // ② API는 800ms 디바운스 — 연속 드래그 시 마지막 1번만 호출
+      clearTimeout(raidOrderSaveTimer.current)
+      raidOrderSaveTimer.current = setTimeout(() => {
+        saveRaidOrder(fingerprint, newOrder).catch(() => {
+          // 저장 실패해도 localStorage가 있으므로 사용자 경험에 영향 없음
+        })
+      }, 800)
+    }
+
     dragIndex.current = null
     dragOverIndex.current = null
   }
@@ -1267,15 +1271,15 @@ export default function MainPage() {
       {groupCreateOpen && (
         <GroupCreateModal
           fingerprint={fingerprint}
+          myRepresentative={myRepresentative}   // 추가
           onClose={() => setGroupCreateOpen(false)}
-          // 수정
           onCreated={(newGroup) => {
             queryClient.setQueryData(['groups', fingerprint], (prev = []) => [...prev, newGroup])
             setGroupCreateOpen(false)
           }}
         />
       )}
-
+      
       {activeGroup && (
         <GroupModal
           group={activeGroup}

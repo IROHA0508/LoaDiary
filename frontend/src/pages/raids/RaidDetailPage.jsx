@@ -117,6 +117,19 @@ const RAID_META = {
   cathedral:          { difficulties: ["1단계","2단계","3단계"],         maxSlots: 4,  entryLevel: { "1단계": 1700, "2단계": 1720, "3단계": 1750 } },
 };
 
+// raid_id → 표시 이름 매핑
+const RAID_NAMES = {
+  argos: "아르고스", valtan: "발탄", biackiss: "비아키스", koukusaton: "쿠크세이튼",
+  abrelshud_legion: "아브렐슈드", illiakan: "일리아칸", kayangel: "카양겔",
+  kamen: "카멘", echidna: "서막 : 에키드나", egir: "1막 : 에기르",
+  abrelshud_kazeroth: "2막 : 아브렐슈드", mordoom: "3막 : 모르둠",
+  armorche: "4막 : 아르모체", kazeroth_boss: "종막 : 카제로스",
+  behemoth: "베히모스", serca: "세르카", tower_chaos: "혼돈의 상아탑",
+  oreha: "오레하의 우물", gate_paradise: "낙원의 문",
+  ark_arrogance: "오만의 방주", dream_palace: "꿈의 궁전", elvalria: "엘발리아",
+  cathedral: "지평의 성당",
+};
+
 /* ─────────────────────────────────────────────
    Main Component
    ───────────────────────────────────────────── */
@@ -162,7 +175,7 @@ export default function RaidDetailPage() {
   const [myRepresentative, setMyRepresentative] = useState(null);
   const [weeklyUsedCharIds, setWeeklyUsedCharIds] = useState(new Set());
   const [editModal, setEditModal] = useState(false);
-  const [editForm, setEditForm] = useState({ difficulty: "", max_slots: 8 });
+  const [editForm, setEditForm] = useState({ raid_id: "", difficulty: "", max_slots: 8 });
   const [editSaving, setEditSaving] = useState(false);
 
   /* ── 최근 멤버 localStorage ─────────────────── */
@@ -347,20 +360,23 @@ export default function RaidDetailPage() {
 
   /* ── 레이드 정보 수정 저장 ──────────────────── */
   const handleEditSave = async () => {
-    setEditSaving(true);
-    try {
-      const updated = await API.updateRaid(raidId, {
-        difficulty: editForm.difficulty,
-        max_slots: editForm.max_slots,
-      });
-      setRaid(updated);
-      setEditModal(false);
-    } catch (e) {
-      showToast(e.message || "수정에 실패했습니다.");
-    } finally {
-      setEditSaving(false);
-    }
-  };
+  setEditSaving(true);
+  try {
+    const newMeta = RAID_META[editForm.raid_id];
+    const updated = await API.updateRaid(raidId, {
+      raid_id: editForm.raid_id,
+      raid_name: RAID_NAMES[editForm.raid_id] ?? raid.raid_name,
+      difficulty: editForm.difficulty,
+      max_slots: editForm.max_slots,
+    });
+    setRaid(updated);
+    setEditModal(false);
+  } catch (e) {
+    showToast(e.message || "수정에 실패했습니다.");
+  } finally {
+    setEditSaving(false);
+  }
+};
 
   /* ── 드래그 앤 드롭 핸들러 ─────────────────── */
   const onCharDragStart = (e, charId) => {
@@ -693,7 +709,7 @@ export default function RaidDetailPage() {
                 <div
                   style={styles.editBtn}
                   onClick={() => {
-                    setEditForm({ difficulty: raid.difficulty, max_slots: raid.max_slots });
+                    setEditForm({ raid_id: raid.raid_id, difficulty: raid.difficulty, max_slots: raid.max_slots });
                     setEditModal(true);
                   }}
                 >
@@ -986,6 +1002,38 @@ export default function RaidDetailPage() {
                 </div>
 
                 <div style={styles.modalSection}>
+                  {/* 레이드 종류 선택 섹션 — 난이도 섹션 바로 앞에 삽입 */}
+                  <div style={styles.modalSection}>
+                    <div style={styles.modalLabel}>레이드 종류</div>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      {Object.entries(RAID_NAMES).map(([id, name]) => (
+                        <div
+                          key={id}
+                          style={{
+                            ...styles.modalDiffBtn,
+                            fontSize: 11,
+                            padding: "5px 12px",
+                            borderColor: editForm.raid_id === id ? "#f59e0b" : "rgba(248,250,252,0.1)",
+                            color: editForm.raid_id === id ? "#f59e0b" : "#64748b",
+                            background: editForm.raid_id === id ? "rgba(245,158,11,0.1)" : "transparent",
+                          }}
+                          onClick={() => {
+                            const newMeta = RAID_META[id] ?? meta;
+                            const defaultDiff = newMeta.difficulties[0];
+                            const defaultSlots = Math.min(editForm.max_slots, newMeta.maxSlots);
+                            setEditForm(f => ({
+                              ...f,
+                              raid_id: id,
+                              difficulty: defaultDiff,
+                              max_slots: defaultSlots % 4 === 0 ? defaultSlots : newMeta.maxSlots,
+                            }));
+                          }}
+                        >
+                          {name}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                   <div style={styles.modalLabel}>난이도</div>
                   <div style={styles.modalDiffRow}>
                     {meta.difficulties.map((d) => (

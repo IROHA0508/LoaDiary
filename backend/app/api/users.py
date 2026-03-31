@@ -1,6 +1,8 @@
 from fastapi import APIRouter, HTTPException, Query
 from app.schemas import UserCreate, UserResponse
 from app.db.supabase_client import supabase
+from typing import List
+from pydantic import BaseModel
 
 router = APIRouter()
 
@@ -88,3 +90,33 @@ def get_user(fingerprint: str):
   if not result.data:
     raise HTTPException(status_code=404, detail="유저를 찾을 수 없습니다.")
   return result.data[0]
+
+class RaidOrderUpdate(BaseModel):
+    raid_ids: List[str]
+
+# 레이드 순서 조회
+@router.get("/{fingerprint}/raid-order")
+def get_raid_order(fingerprint: str):
+    result = (
+        supabase.table("users")
+        .select("raid_order")
+        .eq("fingerprint", fingerprint)
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=404, detail="유저를 찾을 수 없습니다.")
+    return {"raid_order": result.data[0].get("raid_order") or []}
+
+
+# 레이드 순서 저장
+@router.patch("/{fingerprint}/raid-order")
+def save_raid_order(fingerprint: str, payload: RaidOrderUpdate):
+    result = (
+        supabase.table("users")
+        .update({"raid_order": payload.raid_ids})
+        .eq("fingerprint", fingerprint)
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=404, detail="유저를 찾을 수 없습니다.")
+    return {"ok": True}

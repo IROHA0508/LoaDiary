@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 from datetime import datetime, timezone
 from app.schemas import (
   RaidCreate, RaidResponse,
@@ -20,6 +20,8 @@ router = APIRouter()
 class RaidUpdate(BaseModel):
   difficulty: str
   max_slots: int
+  raid_id: Optional[str] = None
+  raid_name: Optional[str] = None
 
 
 # 레이드 생성
@@ -46,30 +48,6 @@ async def create_raid(payload: RaidCreate):
   return result.data[0]
 
 # 생성한 레이드 목록 조회
-# 최적화를 위한 코드 수정
-# @router.get("/my/{fingerprint}", response_model=List[RaidResponse])
-# async def get_my_raids(fingerprint: str):
-#   user_result = (
-#     supabase.table("users")
-#     .select("id")
-#     .eq("fingerprint", fingerprint)
-#     .execute()
-#   )
-  
-#   if not user_result.data:
-#     raise HTTPException(status_code=404, detail="유저를 찾을 수 없습니다.")
-  
-#   user_id = user_result.data[0]["id"]
-
-#   result = (
-#     supabase.table("raids")
-#     .select("*")
-#     .eq("created_by", user_id)
-#     .order("created_at", desc=True)
-#     .execute()
-#   )
-
-#   return result.data
 @router.get("/my/{fingerprint}", response_model=List[RaidResponse])
 async def get_my_raids(fingerprint: str):
     # users 조회를 raids 쿼리와 JOIN으로 합치기
@@ -83,59 +61,6 @@ async def get_my_raids(fingerprint: str):
     return result.data
 
 # 내 캐릭터가 포함된 레이드 조회
-# 최적화를 위한 코드 수정
-# 현재: users 조회 → characters 조회 → raid_slots 조회 → raids 조회 (4번 순차)
-# @router.get("/joined/{fingerprint}", response_model=List[RaidResponse])
-# async def get_joined_raids(fingerprint: str):
-#     """내 캐릭터가 슬롯에 포함된 레이드 목록"""
-#     # 1. fingerprint로 내 캐릭터 id 목록 조회
-#     user_result = (
-#       supabase.table("users")
-#       .select("id")
-#       .eq("fingerprint", fingerprint)
-#       .execute()
-#     )
-
-#     if not user_result.data:
-#       raise HTTPException(status_code=404, detail="유저를 찾을 수 없습니다.")
-
-#     user_id = user_result.data[0]["id"]
-
-#     character_result = (
-#       supabase.table("characters")
-#       .select("id")
-#       .eq("user_id", user_id)
-#       .execute()
-#     )
-
-#     character_ids = [c["id"] for c in character_result.data]
-
-#     if not character_ids:
-#       return []
-
-#     # 2. 내 캐릭터가 포함된 슬롯 조회
-#     slot_result = (
-#       supabase.table("raid_slots")
-#       .select("raid_id")
-#       .in_("character_id", character_ids)
-#       .execute()
-#     )
-
-#     raid_ids = list(set([s["raid_id"] for s in slot_result.data]))
-
-#     if not raid_ids:
-#       return []
-
-#     # 3. 해당 raid_id로 레이드 정보 조회
-#     raid_result = (
-#       supabase.table("raids")
-#       .select("*")
-#       .in_("id", raid_ids)
-#       .order("created_at", desc=True)
-#       .execute()
-#     )
-
-#     return raid_result.data
 @router.get("/joined/{fingerprint}", response_model=List[RaidResponse])
 async def get_joined_raids(fingerprint: str):
     # users + characters를 asyncio.gather로 병렬 처리
@@ -233,12 +158,18 @@ async def update_raid(raid_id: str, payload: RaidUpdate):
       detail=f"현재 {current_slot_count}명이 배치되어 있어 {payload.max_slots}인으로 줄일 수 없습니다."
     )
 
-  updated = (
-    supabase.table("raids")
-    .update({
+  update_data = {
       "difficulty": payload.difficulty,
       "max_slots": payload.max_slots,
-    })
+    }
+  if payload.raid_id is not None:
+    update_data["raid_id"] = payload.raid_id
+  if payload.raid_name is not None:
+    update_data["raid_name"] = payload.raid_name
+
+  updated = (
+    supabase.table("raids")
+    .update(update_data)
     .eq("id", raid_id)
     .execute()
   )

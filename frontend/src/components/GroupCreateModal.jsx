@@ -8,12 +8,25 @@ import client from '../api/client'
 ─────────────────────────────────────────────────────────── */
 export default function GroupCreateModal({ fingerprint, onClose, onCreated }) {
   const [groupName, setGroupName]           = useState('')
-  const [pendingMembers, setPendingMembers] = useState([])
+  // myRepresentative가 있으면 자신을 첫 멤버로 초기값에 넣기
+  const [pendingMembers, setPendingMembers] = useState(
+    myRepresentative ? [{ representative: myRepresentative, isSelf: true }] : []
+  )
   const [addInput, setAddInput]             = useState('')
   const [addError, setAddError]             = useState('')
   const [addLoading, setAddLoading]         = useState(false)
   const [creating, setCreating]             = useState(false)
 
+  // 마운트 시 자신을 첫 번째 멤버로 자동 추가
+  useEffect(() => {
+    if (!fingerprint) return
+    client.get(`/api/users/${fingerprint}`)
+      .then(res => {
+        const rep = res.data?.representative
+        if (rep) setPendingMembers([{ representative: rep, isSelf: true }])
+      })
+      .catch(() => {})
+  }, [fingerprint])
   /* ── 멤버 추가: LoA API 기반 원정대 검증 (/api/users/resolve) ──
      - DB exact match가 아닌 LoA API로 실제 캐릭터 존재 여부 확인
      - HALUNAR 입력 시 → DALUNAR(대표 캐릭터)로 자동 해석해서 표시
@@ -56,9 +69,10 @@ export default function GroupCreateModal({ fingerprint, onClose, onCreated }) {
       latestGroup = await createGroup(fingerprint, groupName.trim() || null)
       // 멤버 추가 — 각 응답이 최신 그룹 전체를 반환하므로 마지막 응답을 사용
       for (const m of pendingMembers) {
+        if (m.isSelf) continue  // 자신은 백엔드 그룹 생성 시 자동으로 추가됨
         try {
           const updated = await addGroupMember(latestGroup.id, m.representative)
-          if (updated) latestGroup = updated  // 최신 상태로 계속 갱신
+          if (updated) latestGroup = updated
         } catch {}
       }
     } catch{
@@ -161,15 +175,20 @@ export default function GroupCreateModal({ fingerprint, onClose, onCreated }) {
                           {m.representative[0]}
                         </span>
                         <span className="text-sm text-gray-200">{m.representative}</span>
+                        {m.isSelf && (
+                          <span className="text-[10px] text-blue-400 bg-blue-400/10 border border-blue-400/20 px-1.5 py-0.5 rounded">나</span>
+                        )}
                       </div>
-                      <button
-                        onClick={() => handleRemovePending(m.representative)}
-                        className="text-gray-600 hover:text-red-400 transition-colors"
-                      >
-                        <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor">
-                          <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd"/>
-                        </svg>
-                      </button>
+                      {!m.isSelf && (
+                        <button
+                          onClick={() => handleRemovePending(m.representative)}
+                          className="text-gray-600 hover:text-red-400 transition-colors"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd"/>
+                          </svg>
+                        </button>
+                      )}
                     </div>
                   ))
                 )}
