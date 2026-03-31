@@ -19,8 +19,6 @@ const DIFF_COLORS = {
   "3단계":   "#ef4444",
 };
 
-const BACKEND_URL = import.meta.env.VITE_API_BASE_URL.replace(/\/+$/, "");
-
 /* ─────────────────────────────────────────────
    API 함수
    ───────────────────────────────────────────── */
@@ -37,20 +35,22 @@ const API = {
     _removeSlot(slotId),
   deleteRaid: (raidId) =>
     _deleteRaid(raidId),
-  getMembers: (raidId) =>
-    client.get(`/api/raids/${raidId}/members`).then((r) => r.data),
-  addMember: (raidId, representative, fingerprint) =>
-    client.post(`/api/raids/${raidId}/members?added_by=${fingerprint}`, { representative })
-      .then((r) => r.data)
-      .catch((e) => { throw new Error(e.response?.data?.detail || e.message); }),
   updateRaid: (raidId, payload) =>
     client.patch(`/api/raids/${raidId}`, payload)
       .then((r) => r.data)
       .catch((e) => { throw new Error(e.response?.data?.detail || e.message); }),
-  removeMember: (raidId, userId) =>
-    client.delete(`/api/raids/${raidId}/members/${userId}`),
   getWeeklyUsedSlots: (raidType, weekStart) =>
     client.get(`/api/raids/weekly-used-slots?raid_type=${raidType}&week_start=${encodeURIComponent(weekStart)}`)
+      .then((r) => r.data),
+  // ── 옵션 B: 로컬 전용 멤버 관리 ──
+  // 대표 캐릭터명으로 유저 해석 (LoA API 호출 포함, 검색창 전용)
+  resolveUser: (characterName) =>
+    client.get('/api/users/resolve', { params: { character_name: characterName } })
+      .then((r) => r.data)
+      .catch((e) => { throw new Error(e.response?.data?.detail || e.message); }),
+  // 대표 캐릭터명 목록으로 캐릭터 일괄 조회 (DB only, 빠름)
+  getCharactersByReps: (reps) =>
+    client.get('/api/users/characters-by-representatives', { params: { reps: reps.join(',') } })
       .then((r) => r.data),
 };
 
@@ -168,34 +168,43 @@ export default function RaidDetailPage() {
   const [searchInput, setSearchInput] = useState("");
   const [searchState, setSearchState] = useState(null);
   const [searchError, setSearchError] = useState("");
-  const [autoLoadedReps, setAutoLoadedReps] = useState(new Set());
   const [recentMemberReps, setRecentMemberReps] = useState(new Set());
+  const [selectedRep, setSelectedRep] = useState(null); // 현재 선택된 원정대
   const [myGroups, setMyGroups] = useState([]);
   const [myRepresentative, setMyRepresentative] = useState(null);
-  const [selectedRep, setSelectedRep] = useState(null); // 선택된 원정대
   const [weeklyUsedCharIds, setWeeklyUsedCharIds] = useState(new Set());
   const [editModal, setEditModal] = useState(false);
   const [editForm, setEditForm] = useState({ raid_id: "", difficulty: "", max_slots: 8 });
   const [editSaving, setEditSaving] = useState(false);
 
-  /* ── 최근 멤버 localStorage ─────────────────── */
-  const recentMembersKey = 'raid_recent_members_global';
+  const RECENT_MEMBERS_KEY = 'raid_recent_members_global';
+  const RECENT_MEMBERS_MAX = 20; // 최대 보관 수
 
+  // 최근 검색 저장 — 중복 시 맨 앞으로 이동 (LRU 방식)
   const saveRecentMember = (representative) => {
-    if (!recentMembersKey) return;
+    if (!representative) return;
     try {
-      const prev = JSON.parse(localStorage.getItem(recentMembersKey) || "[]");
-      if (!prev.includes(representative)) {
-        localStorage.setItem(recentMembersKey, JSON.stringify([...prev, representative]));
-      }
+      const prev = JSON.parse(localStorage.getItem(RECENT_MEMBERS_KEY) || "[]");
+      const updated = [representative, ...prev.filter(r => r !== representative)]
+        .slice(0, RECENT_MEMBERS_MAX);
+      localStorage.setItem(RECENT_MEMBERS_KEY, JSON.stringify(updated));
     } catch {}
   };
 
+  // 최근 검색 목록 로드
   const loadRecentMembers = () => {
-    if (!recentMembersKey) return [];
     try {
-      return JSON.parse(localStorage.getItem(recentMembersKey) || "[]");
+      return JSON.parse(localStorage.getItem(RECENT_MEMBERS_KEY) || "[]");
     } catch { return []; }
+  };
+
+  // 최근 검색에서 제거 (멤버를 명시적으로 삭제할 때)
+  const removeRecentMember = (representative) => {
+    if (!representative) return;
+    try {
+      const prev = JSON.parse(localStorage.getItem(RECENT_MEMBERS_KEY) || "[]");
+      localStorage.setItem(RECENT_MEMBERS_KEY, JSON.stringify(prev.filter(r => r !== representative)));
+    } catch {}
   };
 
   /* ── Realtime 구독 ──────────────────────────── */
@@ -203,24 +212,20 @@ export default function RaidDetailPage() {
     if (!raidId) return;
 
     const slotsChannel = supabase
-      .channel(`raid_slots:${raidId}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "raid_slots", filter: `raid_id=eq.${raidId}` },
-        async () => {
-          const [updatedSlots, updatedMembers] = await Promise.all([
-            API.getSlots(raidId),
-            API.getMembers(raidId),
-          ]);
-          setSavedSlots(updatedSlots);
-          // 내가 편집 중이 아닐 때만 pendingSlots도 서버 값으로 동기화
-          if (!isDirtyRef.current) {
-            setPendingSlots(updatedSlots);
-          }
-          setMembers(updatedMembers);
+    .channel(`raid_slots:${raidId}`)
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "raid_slots", filter: `raid_id=eq.${raidId}` },
+      async () => {
+        // 멤버는 로컬 상태이므로 슬롯만 갱신
+        const updatedSlots = await API.getSlots(raidId);
+        setSavedSlots(updatedSlots);
+        if (!isDirtyRef.current) {
+          setPendingSlots(updatedSlots);
         }
-      )
-      .subscribe();
+      }
+    )
+    .subscribe();
 
     const membersChannel = supabase
       .channel(`raid_members:${raidId}`)
@@ -250,7 +255,7 @@ export default function RaidDetailPage() {
 
     return () => {
       supabase.removeChannel(slotsChannel);
-      supabase.removeChannel(membersChannel);
+      // supabase.removeChannel(membersChannel);
       supabase.removeChannel(raidInfoChannel);
     };
   }, [raidId]);
@@ -261,83 +266,69 @@ export default function RaidDetailPage() {
 
     const load = async () => {
       try {
-        const [raidData, slotsData, charsData, membersData, groupsData, myUserData] = await Promise.all([
+        // getMembers 제거 — 멤버는 로컬에서 관리
+        const [raidData, slotsData, charsData, groupsData, myUserData] = await Promise.all([
           API.getRaid(raidId),
           API.getSlots(raidId),
           API.getMyCharacters(fingerprint),
-          API.getMembers(raidId),
           getMyGroups(fingerprint).catch(() => []),
           getUser(fingerprint).catch(() => null),
         ]);
+
         setRaid(raidData);
         setSavedSlots(slotsData);
         setPendingSlots(slotsData);
         setMyCharacters(charsData);
         setMyGroups(groupsData);
 
-        const myRepresentative = myUserData?.representative ?? null;
-        setMyRepresentative(myRepresentative);
-        // 내 원정대를 기본 선택 (없으면 첫 번째 멤버)
-        setSelectedRep((prev) => prev ?? myRepresentative ?? membersData[0]?.representative ?? null);
+        const myRep = myUserData?.representative ?? null;
+        setMyRepresentative(myRep);
 
-        const groupMemberOrder = [];
+        // ── 규칙3: 그룹 멤버 수집 (내 원정대 제외) ──
+        const groupMemberReps = [];
         groupsData.forEach(group => {
           group.members.forEach(m => {
-            if (!groupMemberOrder.includes(m.representative) && m.representative !== myRepresentative) {
-              groupMemberOrder.push(m.representative);
+            if (
+              m.representative !== myRep &&
+              !groupMemberReps.includes(m.representative)
+            ) {
+              groupMemberReps.push(m.representative);
             }
           });
         });
 
-        const recentReps = loadRecentMembers();
-        let existingReps = new Set(membersData.map(m => m.representative).filter(Boolean));
-
+        // ── 규칙2, 3: 최근 검색 (내 원정대 제외) ──
+        const recentReps = loadRecentMembers().filter(r => r !== myRep);
         setRecentMemberReps(new Set(recentReps));
 
-        const toAutoLoad = [
-          ...recentReps.filter(r => !existingReps.has(r)),
-          ...groupMemberOrder.filter(r => !existingReps.has(r) && !recentReps.includes(r)),
+        // ── 규칙1: 최근 + 그룹 합치기 (중복 제거, 최근 우선) ──
+        const allRepsToLoad = [
+          ...recentReps,
+          ...groupMemberReps.filter(r => !recentReps.includes(r)),
         ];
 
-        // 병렬로 모든 addMember 요청 동시 발사
-        const results = await Promise.allSettled(
-          toAutoLoad.map((rep) => API.addMember(raidId, rep, fingerprint))
-        );
+        // ── DB 배치 조회 1번으로 모든 캐릭터 가져오기 ──
+        if (allRepsToLoad.length > 0) {
+          try {
+            const loadedMembers = await API.getCharactersByReps(allRepsToLoad);
 
-        const autoLoaded = new Set();
-        results.forEach((result, i) => {
-          const rep = toAutoLoad[i];
-          if (result.status === "fulfilled") {
-            autoLoaded.add(rep);
-          } else {
-            const e = result.reason;
-            if (e.message?.includes("409") || e.response?.status === 409) {
-              existingReps.add(rep);
-            }
+            // allRepsToLoad 순서 유지 (최근 → 그룹 순)
+            const repOrder = new Map(allRepsToLoad.map((r, i) => [r, i]));
+            const sorted = [...loadedMembers].sort((a, b) =>
+              (repOrder.get(a.representative) ?? 999) - (repOrder.get(b.representative) ?? 999)
+            );
+
+            setMembers(sorted);
+            // 내 원정대 기본 선택, 없으면 첫 번째 멤버
+            setSelectedRep(myRep ?? sorted[0]?.representative ?? null);
+          } catch {
+            setSelectedRep(myRep);
           }
-        });
-
-        let finalMembers = membersData;
-        if (autoLoaded.size > 0) {
-          finalMembers = await API.getMembers(raidId);
-          setAutoLoadedReps(autoLoaded);
+        } else {
+          setSelectedRep(myRep);
         }
 
-        const sortedMembers = [...finalMembers].sort((a, b) => {
-          const aRecent = recentReps.indexOf(a.representative);
-          const bRecent = recentReps.indexOf(b.representative);
-          const aGroup  = groupMemberOrder.indexOf(a.representative);
-          const bGroup  = groupMemberOrder.indexOf(b.representative);
-          if (aRecent !== -1 && bRecent !== -1) return aRecent - bRecent;
-          if (aRecent !== -1) return -1;
-          if (bRecent !== -1) return 1;
-          if (aGroup !== -1 && bGroup !== -1) return aGroup - bGroup;
-          if (aGroup !== -1) return -1;
-          if (bGroup !== -1) return 1;
-          return 0;
-        });
-        setMembers(sortedMembers);
-
+        // 주간 사용 슬롯
         try {
           const weeklySlots = await API.getWeeklyUsedSlots(raidData.raid_id, getWeekStart());
           const usedIds = new Set(
@@ -521,28 +512,67 @@ export default function RaidDetailPage() {
     setSearchError("");
 
     try {
-      await API.addMember(raidId, name, fingerprint);
-      saveRecentMember(name);
-      const updated = await API.getMembers(raidId);
-      setMembers(updated);
+      // 1. LoA API로 대표 캐릭터명 해석 (어떤 캐릭터명을 입력해도 대표명으로 통일)
+      const resolved = await API.resolveUser(name);
+      const rep = resolved.representative;
+
+      // 2. 본인 확인 (규칙3)
+      if (rep === myRepresentative) {
+        setSearchError("본인은 추가할 수 없습니다.");
+        setSearchState("error");
+        return;
+      }
+
+      // 3. 중복 확인
+      if (members.some(m => m.representative === rep)) {
+        setSearchError("이미 추가된 원정대입니다.");
+        setSearchState("error");
+        return;
+      }
+
+      // 4. DB에서 캐릭터 정보만 가져오기 (DB only, 빠름)
+      const results = await API.getCharactersByReps([rep]);
+      const newMember = results[0];
+
+      if (!newMember) {
+        setSearchError("캐릭터 정보를 찾을 수 없습니다.");
+        setSearchState("error");
+        return;
+      }
+
+      // 5. 로컬 상태 업데이트 + localStorage 저장
+      saveRecentMember(rep);
+      setMembers(prev => [...prev, newMember]);
+      setRecentMemberReps(prev => new Set([...prev, rep]));
+      setSelectedRep(rep); // 추가한 원정대 자동 선택
       setSearchInput("");
       setSearchState("done");
       setTimeout(() => setSearchState(null), 1500);
     } catch (e) {
-      setSearchError(e.message);
+      setSearchError(e.message || "원정대를 찾을 수 없습니다.");
       setSearchState("error");
     }
   };
 
-  const handleRemoveMember = async (userId) => {
-    try {
-      await API.removeMember(raidId, userId);
-      setMembers((prev) => prev.filter((m) => m.user_id !== userId));
-      const updated = await API.getSlots(raidId);
-      setSavedSlots(updated);
-      setPendingSlots(updated);
-    } catch {
-      showToast("멤버 제거에 실패했습니다.");
+  const handleRemoveMember = (userId) => {
+    const removedMember = members.find(m => m.user_id === userId);
+    if (!removedMember) return;
+
+    // 로컬 상태에서만 제거 (DB 호출 없음)
+    setMembers(prev => prev.filter(m => m.user_id !== userId));
+
+    // localStorage에서도 제거 — 다음 접속 시 자동 로드 안 함
+    removeRecentMember(removedMember.representative);
+    setRecentMemberReps(prev => {
+      const next = new Set(prev);
+      next.delete(removedMember.representative);
+      return next;
+    });
+
+    // 제거된 원정대가 선택 중이었으면 내 원정대로 전환
+    if (selectedRep === removedMember.representative) {
+      const remaining = members.filter(m => m.user_id !== userId);
+      setSelectedRep(myRepresentative ?? remaining[0]?.representative ?? null);
     }
   };
 
@@ -1388,7 +1418,11 @@ const styles = {
     flexDirection: "column",
     gap: 4,
     overflowY: "auto",
-    padding: "4px 2px",
+    // 스크롤바와 콘텐츠 사이 간격 확보
+    paddingRight: 10,
+    paddingLeft: 2,
+    paddingTop: 4,
+    paddingBottom: 4,
   },
   repItem: (selected) => ({
     padding: "10px 12px",
@@ -1466,7 +1500,8 @@ const styles = {
   },
   charDetailGrid: {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))",
+    // 고정 3열 — 이름이 긴 캐릭터도 잘리지 않도록 충분한 너비 확보
+    gridTemplateColumns: "repeat(3, 1fr)",
     gap: 8,
     overflowY: "auto",
   },

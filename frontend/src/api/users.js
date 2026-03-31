@@ -14,3 +14,10 @@ export const getRaidOrder = (fingerprint) =>
 // 레이드 순서 저장
 export const saveRaidOrder = (fingerprint, raidIds) =>
   client.patch(`/api/users/${fingerprint}/raid-order`, { raid_ids: raidIds }).then(r => r.data)
+
+// 대표 캐릭터명 목록으로 캐릭터 일괄 조회 (DB only)
+// reps: string[] — 대표 캐릭터명 배열
+export const getCharactersByReps = (reps) =>
+  client.get('/api/users/characters-by-representatives', {
+    params: { reps: reps.join(',') }
+  }).then(r => r.data)

@@ -54,6 +54,58 @@ def create_or_get_user(payload: UserCreate):
     raise HTTPException(status_code=500, detail="유저 생성에 실패했습니다.")
   return result.data[0]
 
+# ── 대표 캐릭터명 목록으로 캐릭터 일괄 조회 (DB only, LoA API 호출 없음) ──
+# 자동 로드(최근 검색, 그룹 멤버) 전용 엔드포인트
+# 반드시 /{fingerprint} 보다 먼저 선언
+@router.get("/characters-by-representatives")
+async def get_characters_by_representatives(reps: str = Query(...)):
+    rep_list = [r.strip() for r in reps.split(",") if r.strip()]
+    if not rep_list:
+        return []
+
+    # 1. 대표 캐릭터명으로 유저 배치 조회 (1 query)
+    users_result = (
+        supabase.table("users")
+        .select("id, representative")
+        .in_("representative", rep_list)
+        .execute()
+    )
+    users = users_result.data or []
+    if not users:
+        return []
+
+    user_ids = [u["id"] for u in users]
+
+    # 2. 캐릭터 배치 조회 (1 query)
+    chars_result = (
+        supabase.table("characters")
+        .select("*")
+        .in_("user_id", user_ids)
+        .order("item_level", desc=True)
+        .execute()
+    )
+
+    # user_id 기준으로 캐릭터 그룹핑
+    chars_by_user: dict = {}
+    for row in (chars_result.data or []):
+        uid = row["user_id"]
+        row["class_name"] = row.pop("class", None)
+        chars_by_user.setdefault(uid, []).append(row)
+
+    # 3. 조립 — rep_list 순서 유지
+    rep_to_user = {u["representative"]: u for u in users}
+    result = []
+    for rep in rep_list:
+        user = rep_to_user.get(rep)
+        if not user:
+            continue
+        result.append({
+            "user_id": user["id"],
+            "representative": user["representative"],
+            "characters": chars_by_user.get(user["id"], []),
+        })
+
+    return result
 
 # ── 캐릭터명으로 원정대 대표 캐릭터 해석 (프론트 검증용) ──
 # 반드시 /{fingerprint} 보다 먼저 선언해야 라우트 충돌이 없음

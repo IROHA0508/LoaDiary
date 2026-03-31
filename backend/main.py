@@ -31,7 +31,7 @@ app.add_middleware(
     "https://loa-diary.vercel.app",
 
     # 백엔드 koyeb 주소
-    "https://legitimate-dreddy-lunarproject-10a2d90e.koyeb.app/"
+    # "https://legitimate-dreddy-lunarproject-10a2d90e.koyeb.app/"
   ],
   allow_credentials = True,
   allow_methods = ["*"],
