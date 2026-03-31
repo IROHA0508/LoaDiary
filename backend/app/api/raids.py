@@ -229,18 +229,24 @@ async def get_all_raids_with_slots(fingerprint: str):
     )
     raids = raids_result.data or []
 
-    # 4. 모든 레이드의 슬롯을 한번에 조회 (레이드별 N번 → 1번)
+    # 4. 모든 레이드의 슬롯을 characters 테이블과 JOIN해서 한번에 조회
+    # → character_name, class_name, is_support를 JOIN으로 채워야 다른 유저 캐릭터도 표시됨
     slots_result = (
         supabase.table("raid_slots")
-        .select("*")
+        .select("id, raid_id, character_id, slot_order, role, characters(name, class, is_support)")
         .in_("raid_id", all_raid_ids)
         .execute()
     )
     slots_data = slots_result.data or []
 
-    # 5. 슬롯을 raid_id 기준으로 그룹핑
+    # 5. JOIN 결과 플래튼 + 슬롯을 raid_id 기준으로 그룹핑
     slots_by_raid = {}
     for slot in slots_data:
+        char_info = slot.pop("characters", None) or {}
+        slot["character_name"] = char_info.get("name")
+        slot["class_name"]     = char_info.get("class")   # DB 컬럼명이 "class"
+        slot["is_support"]     = char_info.get("is_support")
+
         rid = slot["raid_id"]
         if rid not in slots_by_raid:
             slots_by_raid[rid] = []
