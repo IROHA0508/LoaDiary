@@ -6,7 +6,7 @@ import client from '../api/client'
    GroupCreateModal
    플로우: ① 그룹 이름 → ② 멤버 추가(API 실시간 검증) → ③ 완료
 ─────────────────────────────────────────────────────────── */
-export default function GroupCreateModal({ fingerprint, onClose, onCreated }) {
+export default function GroupCreateModal({ fingerprint, myRepresentative,onClose, onCreated }) {
   const [groupName, setGroupName]           = useState('')
   // myRepresentative가 있으면 자신을 첫 멤버로 초기값에 넣기
   const [pendingMembers, setPendingMembers] = useState(
@@ -17,16 +17,6 @@ export default function GroupCreateModal({ fingerprint, onClose, onCreated }) {
   const [addLoading, setAddLoading]         = useState(false)
   const [creating, setCreating]             = useState(false)
 
-  // 마운트 시 자신을 첫 번째 멤버로 자동 추가
-  useEffect(() => {
-    if (!fingerprint) return
-    client.get(`/api/users/${fingerprint}`)
-      .then(res => {
-        const rep = res.data?.representative
-        if (rep) setPendingMembers([{ representative: rep, isSelf: true }])
-      })
-      .catch(() => {})
-  }, [fingerprint])
   /* ── 멤버 추가: LoA API 기반 원정대 검증 (/api/users/resolve) ──
      - DB exact match가 아닌 LoA API로 실제 캐릭터 존재 여부 확인
      - HALUNAR 입력 시 → DALUNAR(대표 캐릭터)로 자동 해석해서 표시
@@ -176,7 +166,7 @@ export default function GroupCreateModal({ fingerprint, onClose, onCreated }) {
                         </span>
                         <span className="text-sm text-gray-200">{m.representative}</span>
                         {m.isSelf && (
-                          <span className="text-[10px] text-blue-400 bg-blue-400/10 border border-blue-400/20 px-1.5 py-0.5 rounded">나</span>
+                          <span className="text-[10px] text-blue-400 bg-blue-400/10 border border-blue-400/20 px-1.5 py-0.5 rounded">내 원정대</span>
                         )}
                       </div>
                       {!m.isSelf && (

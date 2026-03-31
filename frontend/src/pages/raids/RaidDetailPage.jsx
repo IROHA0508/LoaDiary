@@ -989,7 +989,8 @@ export default function RaidDetailPage() {
 
         {/* ── 레이드 정보 수정 모달 ────────────── */}
         {editModal && (() => {
-          const meta = RAID_META[raid.raid_id] || { difficulties: [raid.difficulty], maxSlots: raid.max_slots };
+          // raid.raid_id(원본) 대신 editForm.raid_id(현재 선택된 레이드) 기준으로 meta 계산
+          const meta = RAID_META[editForm.raid_id] || RAID_META[raid.raid_id] || { difficulties: [raid.difficulty], maxSlots: raid.max_slots };
           const diffColor2 = DIFF_COLORS[editForm.difficulty] || "#94a3b8";
           const presets = [];
           for (let n = 4; n <= meta.maxSlots; n += 4) presets.push(n);
