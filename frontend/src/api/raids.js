@@ -23,3 +23,7 @@ export const removeSlot = (slotId) => client.delete(`/api/raids/slots/${slotId}`
 
 // 내 캐릭터가 슬롯에 배치된 레이드 목록 조회
 export const getJoinedRaids = (fingerprint) => client.get(`/api/raids/joined/${fingerprint}`).then(r => r.data)
+
+// 레이드 + 슬롯 통합 조회 (메인페이지 최적화용)
+export const getAllRaidsWithSlots = (fingerprint) =>
+  client.get(`/api/raids/all-with-slots/${fingerprint}`).then(r => r.data)

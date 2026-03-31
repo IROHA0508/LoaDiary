@@ -3,7 +3,7 @@ import { flushSync } from 'react-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { getCharacters, syncAll } from '../api/characters'
-import { getMyRaids, getJoinedRaids, deleteRaid, getSlots } from '../api/raids'
+import { getMyRaids, getJoinedRaids, deleteRaid, getSlots, getAllRaidsWithSlots } from '../api/raids'
 import { useUser } from '../hooks/useUser'
 import { supabase } from '../lib/supabase'
 import { getUser, getRaidOrder, saveRaidOrder } from '../api/users'
@@ -224,21 +224,6 @@ export default function MainPage() {
     }
   }
   // --------------------------------------------그룹 실시간 갱신 수정 코드---------------------------------------------
-  // 그룹 목록 재조회
-  // 그룹 상태 최적화를 위해 주석 처리함
-  // const fetchGroups = useCallback(async () => {
-  //   if (!fingerprint) return
-  //   try {
-  //     setGroupLoading(true)
-  //     const data = await getMyGroups(fingerprint)
-  //     setGroups(data)
-  //   } catch (error) {
-  //     console.error('그룹 목록 조회 실패:', error)
-  //   } finally {
-  //     setGroupLoading(false)
-  //   }
-  // }, [fingerprint])
-
   // 그룹 상태 최적화 코드
   // 그룹 생성/수정 후 갱신이 필요한 곳에서는 fetchGroups() 대신 refetchGroups() 호출
   const { data: groups = [], isLoading: groupLoading, refetch: refetchGroups } = useQuery({
@@ -254,152 +239,99 @@ export default function MainPage() {
   const dragOverIndex = useRef(null)
   const raidOrderSaveTimer = useRef(null)  // 디바운스용 타이머
 
-  // fingerprint 확정 후 localStorage에서 저장된 순서 복원
+  // ① localStorage에서 즉시 복원 (동기) — rawRaids 동기화 전에 순서 확보
   useEffect(() => {
     if (!fingerprint) return
+    try {
+      const saved = JSON.parse(localStorage.getItem(`raidOrder_${fingerprint}`))
+      if (Array.isArray(saved) && saved.length > 0) setRaidOrder(saved)
+    } catch {}
+  }, [fingerprint])
 
-    // 1순위: API에서 저장된 순서 조회
+  // ② API에서 최신 순서 백그라운드 동기화 — 다른 기기 변경사항 반영
+  useEffect(() => {
+    if (!fingerprint) return
     getRaidOrder(fingerprint)
       .then(order => {
         if (Array.isArray(order) && order.length > 0) {
           setRaidOrder(order)
-          // API 성공 시 localStorage도 동기화
           localStorage.setItem(`raidOrder_${fingerprint}`, JSON.stringify(order))
-        } else {
-          // API에 저장된 순서가 없으면 localStorage 폴백
-          try {
-            const saved = JSON.parse(localStorage.getItem(`raidOrder_${fingerprint}`))
-            if (Array.isArray(saved) && saved.length > 0) setRaidOrder(saved)
-          } catch {}
         }
       })
-      .catch(() => {
-        // API 실패 시 localStorage 폴백
-        try {
-          const saved = JSON.parse(localStorage.getItem(`raidOrder_${fingerprint}`))
-          if (Array.isArray(saved) && saved.length > 0) setRaidOrder(saved)
-        } catch {}
-      })
+      .catch(() => {})
   }, [fingerprint])
 
   
-  // 레이드별 슬롯 데이터: { [raidId]: [{slot_order, ...}] }
-  const [slotsMap, setSlotsMap] = useState({})
-
+  
   // ── 완료된 레이드 ID Set ── DB의 is_completed 필드 기준
   // (별도 로컬 state 없이 rawRaids에서 직접 파생)
-
+  
   /* ── 데이터 조회 ──────────────────────────── */
   const { data: characters = [], isLoading: charLoading } = useQuery({
     queryKey: ['characters', fingerprint],
     queryFn: () => getCharacters(fingerprint),
     enabled: !!fingerprint,
   })
-
-  // 내가 만든 레이드
-  const { data: myRaids = [], isLoading: myRaidsLoading } = useQuery({
-    queryKey: ['myRaids', fingerprint],
-    queryFn: () => getMyRaids(fingerprint),
+  
+  // 레이드 + 슬롯을 한번에 조회 — 워터폴 제거
+  const { data: allRaidsWithSlots = [], isLoading: raidLoading } = useQuery({
+    queryKey: ['allRaidsWithSlots', fingerprint],
+    queryFn: () => getAllRaidsWithSlots(fingerprint),
     enabled: !!fingerprint,
   })
-
-  // 내가 참여한 레이드 실시간 갱신을 위한 새로운 코드
-  const { data: joinedRaids = [], isLoading: joinedRaidsLoading } = useQuery({
-    queryKey: ['joinedRaids', fingerprint],
-    queryFn: () => getJoinedRaids(fingerprint),
-    enabled: !!fingerprint,
-  })
-
-  const raidLoading = myRaidsLoading || joinedRaidsLoading
-
-  // 중복 제거 후 합치기
-  const rawRaids = useMemo(() => [
-    ...myRaids,
-    ...joinedRaids.filter(jr => !myRaids.some(mr => mr.id === jr.id))
-  ], [myRaids, joinedRaids])
-
+  
+  // 기존 코드와의 호환성 유지용 파생 데이터
+  const rawRaids = allRaidsWithSlots
+  const myRaids = allRaidsWithSlots.filter(r => r.created_by_fingerprint === fingerprint || r.slots?.some(() => true))
+  
   // rawRaids 변경 시 raidOrder를 현재 목록과 동기화
   // - 새로 추가된 레이드는 맨 앞으로 자동 추가
   // - 삭제된 레이드는 순서 배열에서 제거
   useEffect(() => {
     const rawIds = rawRaids.map(r => r.id)
-
+    
     setRaidOrder(prev => {
       // 기존 순서 중 아직 존재하는 것만 유지
       const kept = prev.filter(id => rawIds.includes(id))
-
+      
       // 새로 들어온 레이드 id 추가
       const added = rawIds.filter(id => !kept.includes(id))
-
+      
       // 변경사항이 없으면 prev 그대로 반환 → React가 re-render 생략
       if (added.length === 0 && kept.length === prev.length) return prev
       return [...added, ...kept]
     })
   }, [rawRaids])
-
+  
   // 순서 배열 기반으로 raids 정렬
   const baseRaids = raidOrder.length > 0
-    ? raidOrder.map(id => rawRaids.find(r => r.id === id)).filter(Boolean)
-    : rawRaids
-
+  ? raidOrder.map(id => rawRaids.find(r => r.id === id)).filter(Boolean)
+  : rawRaids
+  
   // ── 완료된 레이드는 항상 맨 아래로 (DB is_completed 기준) ──
   const raids = [
     ...baseRaids.filter(r => !r.is_completed),
     ...baseRaids.filter(r =>  r.is_completed),
   ]
-
+  
   // 완료 개수
   const completedCount = rawRaids.filter(r => r.is_completed).length
+  
+  // 슬롯이 이미 allRaidsWithSlots에 포함되어 있으므로 별도 조회 불필요
+  // slotsMap은 allRaidsWithSlots에서 직접 파생
+  const slotsMap = useMemo(() => {
+    const map = {}
+    allRaidsWithSlots.forEach(r => { map[r.id] = r.slots || [] })
+    return map
+  }, [allRaidsWithSlots])
 
-  // raids가 확정되면 각 레이드의 슬롯 일괄 조회
-  // rawRaids가 바뀔 때마다 새 레이드의 슬롯만 추가 조회
-  const prevRaidIdsRef = useRef(new Set())
-  // if (!raidLoading && rawRaids.length > 0) {
-  //   const newIds = rawRaids.filter(r => !prevRaidIdsRef.current.has(r.id))
-  //   if (newIds.length > 0) {
-  //     newIds.forEach(r => prevRaidIdsRef.current.add(r.id))
-  //     Promise.all(newIds.map(r => getSlots(r.id).then(slots => ({ id: r.id, slots }))))
-  //       .then(results => {
-  //         setSlotsMap(prev => {
-  //           const next = { ...prev }
-  //           results.forEach(({ id, slots }) => { next[id] = slots })
-  //           return next
-  //         })
-  //       })
-  //   }
-  // }
-
-  // GPT 의견: React 규칙 위한, 버그 가능성 있음 -> 미리 코드 변경함
-  useEffect(() => {
-    if (raidLoading || rawRaids.length === 0) return
-
-    const newIds = rawRaids.filter(r => !prevRaidIdsRef.current.has(r.id))
-    if (newIds.length === 0) return
-
-    newIds.forEach(r => prevRaidIdsRef.current.add(r.id))
-
-    Promise.all(
-      newIds.map(r =>
-        getSlots(r.id).then(slots => ({ id: r.id, slots }))
-      )
-    ).then(results => {
-      setSlotsMap(prev => {
-        const next = { ...prev }
-        results.forEach(({ id, slots }) => {
-          next[id] = slots
-        })
-        return next
-      })
-    })
-  }, [raidLoading, rawRaids])
+  
   /* ── 레이드 삭제 ──────────────────────────── */
   const deleteMutation = useMutation({
     mutationFn: (raidId) => deleteRaid(raidId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['myRaids', fingerprint] })
-      queryClient.invalidateQueries({ queryKey: ['joinedRaids', fingerprint] })
-      queryClient.refetchQueries({ queryKey: ['myRaids', fingerprint] })
-      queryClient.refetchQueries({ queryKey: ['joinedRaids', fingerprint] })
+      queryClient.invalidateQueries({ queryKey: ['allRaidsWithSlots', fingerprint] })
+      queryClient.refetchQueries({ queryKey: ['allRaidsWithSlots', fingerprint] })
       setRaidToDelete(null)
     },
   })
@@ -408,8 +340,8 @@ export default function MainPage() {
   const leaveMutation = useMutation({
     mutationFn: (raidId) => client.delete(`/api/raids/${raidId}/members/${myUserId}`),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['joinedRaids', fingerprint] })
-      queryClient.refetchQueries({ queryKey: ['joinedRaids', fingerprint] })
+      queryClient.invalidateQueries({ queryKey: ['allRaidsWithSlots', fingerprint] })
+      queryClient.refetchQueries({ queryKey: ['allRaidsWithSlots', fingerprint] })
       setRaidToDelete(null)
     },
   })
@@ -1279,7 +1211,7 @@ export default function MainPage() {
           }}
         />
       )}
-      
+
       {activeGroup && (
         <GroupModal
           group={activeGroup}

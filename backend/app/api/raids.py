@@ -189,6 +189,69 @@ async def update_raid(raid_id: str, payload: RaidUpdate):
 
   return updated.data[0]
 
+# 레이드 + 슬롯 통합 조회 (메인페이지 최적화용)
+# GET /api/raids/all-with-slots/{fingerprint}
+@router.get("/all-with-slots/{fingerprint}")
+async def get_all_raids_with_slots(fingerprint: str):
+    # 1. user_id 조회
+    user_result = supabase.table("users").select("id").eq("fingerprint", fingerprint).execute()
+    if not user_result.data:
+        raise HTTPException(status_code=404, detail="유저를 찾을 수 없습니다.")
+    user_id = user_result.data[0]["id"]
+
+    # 2. 내가 만든 레이드 + 내 캐릭터가 슬롯에 있는 레이드를 한번에 조회
+    my_raids_result = (
+        supabase.table("raids")
+        .select("*")
+        .eq("created_by", user_id)
+        .execute()
+    )
+    my_raid_ids = {r["id"] for r in (my_raids_result.data or [])}
+
+    slot_result = (
+        supabase.table("raid_slots")
+        .select("raid_id, characters!inner(user_id)")
+        .eq("characters.user_id", user_id)
+        .execute()
+    )
+    joined_raid_ids = {s["raid_id"] for s in (slot_result.data or [])}
+
+    all_raid_ids = list(my_raid_ids | joined_raid_ids)
+    if not all_raid_ids:
+        return []
+
+    # 3. 해당 레이드들 전체 조회
+    raids_result = (
+        supabase.table("raids")
+        .select("*")
+        .in_("id", all_raid_ids)
+        .execute()
+    )
+    raids = raids_result.data or []
+
+    # 4. 모든 레이드의 슬롯을 한번에 조회 (레이드별 N번 → 1번)
+    slots_result = (
+        supabase.table("raid_slots")
+        .select("*")
+        .in_("raid_id", all_raid_ids)
+        .execute()
+    )
+    slots_data = slots_result.data or []
+
+    # 5. 슬롯을 raid_id 기준으로 그룹핑
+    slots_by_raid = {}
+    for slot in slots_data:
+        rid = slot["raid_id"]
+        if rid not in slots_by_raid:
+            slots_by_raid[rid] = []
+        slots_by_raid[rid].append(slot)
+
+    # 6. 각 레이드에 slots 필드 포함해서 반환
+    for raid in raids:
+        raid["slots"] = slots_by_raid.get(raid["id"], [])
+
+    return raids
+
 # 단일 레이드 조회
 @router.get("/{raid_id}", response_model=RaidResponse)
 async def get_raid(raid_id: str):
