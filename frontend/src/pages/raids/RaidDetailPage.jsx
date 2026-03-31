@@ -172,6 +172,7 @@ export default function RaidDetailPage() {
   const [recentMemberReps, setRecentMemberReps] = useState(new Set());
   const [myGroups, setMyGroups] = useState([]);
   const [myRepresentative, setMyRepresentative] = useState(null);
+  const [selectedRep, setSelectedRep] = useState(null); // 선택된 원정대
   const [weeklyUsedCharIds, setWeeklyUsedCharIds] = useState(new Set());
   const [editModal, setEditModal] = useState(false);
   const [editForm, setEditForm] = useState({ raid_id: "", difficulty: "", max_slots: 8 });
@@ -276,6 +277,8 @@ export default function RaidDetailPage() {
 
         const myRepresentative = myUserData?.representative ?? null;
         setMyRepresentative(myRepresentative);
+        // 내 원정대를 기본 선택 (없으면 첫 번째 멤버)
+        setSelectedRep((prev) => prev ?? myRepresentative ?? membersData[0]?.representative ?? null);
 
         const groupMemberOrder = [];
         groupsData.forEach(group => {
@@ -296,18 +299,23 @@ export default function RaidDetailPage() {
           ...groupMemberOrder.filter(r => !existingReps.has(r) && !recentReps.includes(r)),
         ];
 
+        // 병렬로 모든 addMember 요청 동시 발사
+        const results = await Promise.allSettled(
+          toAutoLoad.map((rep) => API.addMember(raidId, rep, fingerprint))
+        );
+
         const autoLoaded = new Set();
-        for (const rep of toAutoLoad) {
-          try {
-            await API.addMember(raidId, rep, fingerprint);
+        results.forEach((result, i) => {
+          const rep = toAutoLoad[i];
+          if (result.status === "fulfilled") {
             autoLoaded.add(rep);
-          } catch (e){
-            // 409 Conflict = 이미 멤버로 추가된 상태 → existingReps에 추가해서 중복 방지
-            if (e.message?.includes('409') || e.response?.status === 409) {
+          } else {
+            const e = result.reason;
+            if (e.message?.includes("409") || e.response?.status === 409) {
               existingReps.add(rep);
             }
           }
-        }
+        });
 
         let finalMembers = membersData;
         if (autoLoaded.size > 0) {
@@ -831,156 +839,131 @@ export default function RaidDetailPage() {
             {/* 힌트 */}
             <div style={styles.charHint}>클릭으로 배치 · 우클릭으로 제거 · 드래그로 위치 조절</div>
 
-            {/* 수평 스크롤 원정대 컬럼들 */}
-            <div style={{ position: "relative" }}>
-              <div
-                style={styles.scrollBtn("left")}
-                onClick={() => columnsRef.current?.scrollBy({ left: -240, behavior: "smooth" })}
-              >
-                <svg width="10" height="16" viewBox="0 0 10 16" fill="none">
-                  <path d="M8 2L2 8L8 14" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </div>
-              <div style={styles.charColumnsRow} ref={columnsRef}>
+            {/* 좌우 패널 레이아웃 */}
+            <div style={styles.panelLayout}>
 
-              {/* 내 원정대 */}
-              <div style={styles.charColumn}>
-                <div style={styles.charColumnHeader}>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
-                    <div style={styles.charGroupLabel}>내 원정대</div>
-                    <span style={{ display: "block", height: 16 }} />
-                  </div>
+              {/* ── 왼쪽: 원정대 목록 패널 ── */}
+              <div style={styles.repListPanel}>
+                {/* 내 원정대 */}
+                <div
+                  style={styles.repItem(selectedRep === myRepresentative)}
+                  onClick={() => setSelectedRep(myRepresentative)}
+                >
+                  <span style={styles.repItemLabel}>내 원정대</span>
+                  {myRepresentative && (
+                    <span style={styles.repItemSub}>{myRepresentative}</span>
+                  )}
                 </div>
-                {myCharacters.length === 0 ? (
-                  <div style={styles.emptyChars}>캐릭터 없음</div>
-                ) : (
-                  myCharacters.map((char) => {
-                    const placed = isCharPlaced(char.id);
-                    const userPlaced = isUserAlreadyPlaced(char.id);
-                    const levelInsufficient = isLevelInsufficient(char.id);
-                    const weeklyUsed = isWeeklyUsed(char.id);
-                    const draggable = isDraggable(char.id);
-                    const disabled = placed || userPlaced || levelInsufficient || weeklyUsed;
-                    const titleMsg = placed ? "이미 배치됨"
-                      : weeklyUsed ? "이번 주 동일 레이드 다른 난이도에 배치됨"
-                      : levelInsufficient ? `입장 레벨 부족 (${RAID_META[raid.raid_id]?.entryLevel?.[raid.difficulty] ?? "?"})`
-                      : userPlaced ? "같은 원정대 캐릭터가 배치됨"
-                      : "클릭 또는 드래그해서 배치";
+
+                {/* 구분선 */}
+                {members.filter(m => m.representative !== myRepresentative).length > 0 && (
+                  <div style={styles.repDivider} />
+                )}
+
+                {/* 멤버 원정대 목록 */}
+                {members
+                  .filter((m) => m.representative !== myRepresentative)
+                  .map((member) => {
+                    const groupNames = getGroupNamesForMember(member.representative);
+                    const isRecent = recentMemberReps.has(member.representative);
+                    const isSelected = selectedRep === member.representative;
                     return (
                       <div
-                        key={char.id}
-                        draggable={draggable}
-                        onDragStart={(e) => draggable && onCharDragStart(e, char.id)}
-                        onClick={() => onCharClick(char.id)}
-                        style={styles.charCard(disabled, levelInsufficient || weeklyUsed)}
-                        title={titleMsg}
+                        key={member.user_id}
+                        style={styles.repItem(isSelected)}
+                        onClick={() => setSelectedRep(member.representative)}
                       >
-                        <div style={styles.charCardLeft}>
-                          <div style={styles.charName}>{char.name}</div>
-                          <div style={styles.charClass}>{char.class_name}</div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                          <span style={styles.repItemLabel}>{member.representative}</span>
+                          <div
+                            style={styles.repRemoveBtn}
+                            onClick={(e) => { e.stopPropagation(); handleRemoveMember(member.user_id); }}
+                            title="멤버 제거"
+                          >✕</div>
                         </div>
-                        <div style={styles.charLevel}>
-                          {char.item_level?.toLocaleString() ?? "-"}
-                        </div>
-                        {placed && <div style={styles.placedBadge}>배치됨</div>}
-                        {weeklyUsed && !placed && (
-                          <div style={{ ...styles.placedBadge, color: "#ef4444" }}>주간 사용</div>
-                        )}
-                        {levelInsufficient && !placed && !weeklyUsed && (
-                          <div style={{ ...styles.placedBadge, color: "#64748b" }}>레벨 부족</div>
-                        )}
-                        {!placed && !levelInsufficient && !weeklyUsed && userPlaced && (
-                          <div style={{ ...styles.placedBadge, color: "#ef4444" }}>배치 불가</div>
-                        )}
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-
-              {/* 멤버별 원정대 컬럼 */}
-              {members.filter(member => member.representative !== myRepresentative).map((member) => {
-                const groupNames = getGroupNamesForMember(member.representative);
-                const isRecent   = recentMemberReps.has(member.representative);
-                return (
-                  <div key={member.user_id} style={styles.charColumn}>
-                    <div style={styles.charColumnHeader}>
-                      <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
-                        <div style={styles.charGroupLabel}>{member.representative}</div>
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: 3, minHeight: 16 }}>
-                          {isRecent && (
-                            <span style={styles.autoLoadedBadge}>최근 검색한 원정대</span>
-                          )}
-                          {groupNames.map(name => (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginTop: 2 }}>
+                          {isRecent && <span style={styles.autoLoadedBadge}>최근</span>}
+                          {groupNames.map((name) => (
                             <span key={name} style={styles.groupNameBadge}>{name}</span>
                           ))}
                         </div>
                       </div>
+                    );
+                  })}
+              </div>
 
-                    <div
-                      style={styles.removeMemberBtn}
-                      onClick={() => handleRemoveMember(member.user_id)}
-                      title="멤버 제거"
-                    >
-                      ✕
-                    </div>
-                  </div>
-                  {member.characters.length === 0 ? (
-                    <div style={styles.emptyChars}>캐릭터 없음</div>
-                  ) : (
-                    member.characters.map((char) => {
-                      const placed = isCharPlaced(char.id);
-                      const userPlaced = isUserAlreadyPlaced(char.id);
-                      const levelInsufficient = isLevelInsufficient(char.id);
-                      const weeklyUsed = isWeeklyUsed(char.id);
-                      const draggable = isDraggable(char.id);
-                      const disabled = placed || userPlaced || levelInsufficient || weeklyUsed;
-                      const titleMsg = placed ? "이미 배치됨"
-                        : weeklyUsed ? "이번 주 동일 레이드 다른 난이도에 배치됨"
-                        : levelInsufficient ? `입장 레벨 부족 (${RAID_META[raid.raid_id]?.entryLevel?.[raid.difficulty] ?? "?"})`
-                        : userPlaced ? "같은 원정대 캐릭터가 배치됨"
-                        : "클릭 또는 드래그해서 배치";
-                      return (
-                        <div
-                          key={char.id}
-                          draggable={draggable}
-                          onDragStart={(e) => draggable && onCharDragStart(e, char.id)}
-                          onClick={() => onCharClick(char.id)}
-                          style={styles.charCard(disabled, levelInsufficient || weeklyUsed)}
-                          title={titleMsg}
-                        >
-                          <div style={styles.charCardLeft}>
-                            <div style={styles.charName}>{char.name}</div>
-                            <div style={styles.charClass}>{char.class_name}</div>
-                          </div>
-                          <div style={styles.charLevel}>
-                            {char.item_level?.toLocaleString() ?? "-"}
-                          </div>
-                          {placed && <div style={styles.placedBadge}>배치됨</div>}
-                          {weeklyUsed && !placed && (
-                            <div style={{ ...styles.placedBadge, color: "#ef4444" }}>주간 사용</div>
-                          )}
-                          {levelInsufficient && !placed && !weeklyUsed && (
-                            <div style={{ ...styles.placedBadge, color: "#64748b" }}>레벨 부족</div>
-                          )}
-                          {!placed && !levelInsufficient && !weeklyUsed && userPlaced && (
-                            <div style={{ ...styles.placedBadge, color: "#ef4444" }}>배치 불가</div>
-                          )}
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              )
-            })}
-            </div>
-              <div
-                style={styles.scrollBtn("right")}
-                onClick={() => columnsRef.current?.scrollBy({ left: 240, behavior: "smooth" })}
-              >
-                <svg width="10" height="16" viewBox="0 0 10 16" fill="none">
-                  <path d="M2 2L8 8L2 14" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
+              {/* ── 오른쪽: 선택된 원정대 캐릭터 패널 ── */}
+              <div style={styles.charDetailPanel}>
+                {(() => {
+                  // 선택된 원정대의 캐릭터 목록 결정
+                  const isMe = selectedRep === myRepresentative;
+                  const chars = isMe
+                    ? myCharacters
+                    : members.find((m) => m.representative === selectedRep)?.characters ?? [];
+
+                  if (!selectedRep) {
+                    return <div style={styles.emptyChars}>원정대를 선택하세요</div>;
+                  }
+
+                  return (
+                    <>
+                      <div style={styles.charDetailHeader}>
+                        <span style={styles.charDetailTitle}>
+                          {isMe ? "내 원정대" : selectedRep}
+                        </span>
+                        <span style={styles.charDetailCount}>{chars.length}개 캐릭터</span>
+                      </div>
+                      <div style={styles.charDetailGrid}>
+                        {chars.length === 0 ? (
+                          <div style={styles.emptyChars}>캐릭터 없음</div>
+                        ) : (
+                          chars.map((char) => {
+                            const placed = isCharPlaced(char.id);
+                            const userPlaced = isUserAlreadyPlaced(char.id);
+                            const levelInsufficient = isLevelInsufficient(char.id);
+                            const weeklyUsed = isWeeklyUsed(char.id);
+                            const draggable = isDraggable(char.id);
+                            const disabled = placed || userPlaced || levelInsufficient || weeklyUsed;
+                            const titleMsg = placed ? "이미 배치됨"
+                              : weeklyUsed ? "이번 주 동일 레이드 다른 난이도에 배치됨"
+                              : levelInsufficient
+                                ? `입장 레벨 부족 (${RAID_META[raid.raid_id]?.entryLevel?.[raid.difficulty] ?? "?"})`
+                              : userPlaced ? "이미 다른 슬롯에 배치됨"
+                              : "";
+                            return (
+                              <div
+                                key={char.id}
+                                style={styles.charCard(disabled, placed)}
+                                title={titleMsg}
+                                draggable={draggable}
+                                onDragStart={draggable ? () => setDragCharId(char.id) : undefined}
+                                onDragEnd={draggable ? () => setDragCharId(null) : undefined}
+                                onClick={!disabled ? () => handleCharClick(char.id) : undefined}
+                                onContextMenu={(e) => { e.preventDefault(); if (placed) handleCharRightClick(char.id); }}
+                              >
+                                <div style={styles.charName}>{char.name}</div>
+                                <div style={styles.charClass}>{char.class_name ?? "-"}</div>
+                                <div style={styles.charLevel}>
+                                  {char.item_level ? Number(char.item_level).toLocaleString() : "-"}
+                                </div>
+                                {placed && <div style={styles.placedBadge}>배치됨</div>}
+                                {weeklyUsed && !placed && (
+                                  <div style={{ ...styles.placedBadge, color: "#ef4444" }}>주간 사용</div>
+                                )}
+                                {levelInsufficient && !placed && !weeklyUsed && (
+                                  <div style={{ ...styles.placedBadge, color: "#64748b" }}>레벨 부족</div>
+                                )}
+                                {!placed && !levelInsufficient && !weeklyUsed && userPlaced && (
+                                  <div style={{ ...styles.placedBadge, color: "#ef4444" }}>배치 불가</div>
+                                )}
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
             </div>
           </div>
@@ -1390,6 +1373,102 @@ const styles = {
     gap: 10,
     overflowX: "auto",
     paddingBottom: 8,
+  },
+  // 기존 스타일들 유지하고 아래 추가
+  panelLayout: {
+    display: "flex",
+    gap: 12,
+    minHeight: 320,
+    maxHeight: 480,
+  },
+  repListPanel: {
+    width: 180,
+    flexShrink: 0,
+    display: "flex",
+    flexDirection: "column",
+    gap: 4,
+    overflowY: "auto",
+    padding: "4px 2px",
+  },
+  repItem: (selected) => ({
+    padding: "10px 12px",
+    borderRadius: 10,
+    border: selected
+      ? "1.5px solid #f59e0b"
+      : "1px solid rgba(248,250,252,0.06)",
+    background: selected
+      ? "rgba(245,158,11,0.08)"
+      : "rgba(30,41,59,0.35)",
+    cursor: "pointer",
+    transition: "all 0.15s ease",
+    flexShrink: 0,
+  }),
+  repItemLabel: {
+    display: "block",
+    fontSize: 13,
+    fontWeight: 600,
+    color: "#f1f5f9",
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+  },
+  repItemSub: {
+    display: "block",
+    fontSize: 11,
+    color: "#64748b",
+    marginTop: 2,
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+  },
+  repDivider: {
+    height: 1,
+    background: "rgba(248,250,252,0.06)",
+    margin: "4px 0",
+    flexShrink: 0,
+  },
+  repRemoveBtn: {
+    fontSize: 11,
+    color: "#64748b",
+    cursor: "pointer",
+    padding: "1px 4px",
+    borderRadius: 4,
+    marginLeft: "auto",
+    flexShrink: 0,
+    transition: "color 0.15s",
+  },
+  charDetailPanel: {
+    flex: 1,
+    minWidth: 0,
+    display: "flex",
+    flexDirection: "column",
+    gap: 10,
+    border: "1px solid rgba(248,250,252,0.08)",
+    borderRadius: 14,
+    padding: "14px 16px",
+    background: "rgba(15,23,42,0.4)",
+    overflowY: "auto",
+  },
+  charDetailHeader: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    flexShrink: 0,
+  },
+  charDetailTitle: {
+    fontSize: 15,
+    fontWeight: 700,
+    color: "#f1f5f9",
+  },
+  charDetailCount: {
+    fontSize: 12,
+    color: "#64748b",
+  },
+  charDetailGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))",
+    gap: 8,
+    overflowY: "auto",
   },
   charColumn: {
     width: 220,

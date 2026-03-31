@@ -474,58 +474,57 @@ async def add_member(raid_id: str, payload: RaidMemberCreate, added_by: str):
 # 멤버 목록 조회 (유저 정보 + 원정대 캐릭터 포함)
 @router.get("/{raid_id}/members", response_model=List[RaidMemberWithCharacters])
 async def get_members(raid_id: str):
-  # 1. 해당 레이드의 멤버 목록 조회
+  # 1. 멤버 목록 조회
   member_result = (
     supabase.table("raid_members")
     .select("user_id")
     .eq("raid_id", raid_id)
     .execute()
   )
- 
   if not member_result.data:
     return []
- 
+
   user_ids = [m["user_id"] for m in member_result.data]
- 
-  # 2. 각 유저의 정보 + 캐릭터 목록 조회
+
+  # 2. 유저 정보 배치 조회 (N번 → 1번)
+  users_result = (
+    supabase.table("users")
+    .select("id, representative")
+    .in_("id", user_ids)
+    .execute()
+  )
+  user_map = {u["id"]: u for u in (users_result.data or [])}
+
+  # 3. 캐릭터 배치 조회 (N번 → 1번)
+  chars_result = (
+    supabase.table("characters")
+    .select("*")
+    .in_("user_id", user_ids)
+    .order("item_level", desc=True)
+    .execute()
+  )
+
+  # user_id 기준으로 캐릭터 그룹핑
+  chars_by_user: dict = {}
+  for row in (chars_result.data or []):
+    uid = row["user_id"]
+    row["class_name"] = row.pop("class", None)
+    chars_by_user.setdefault(uid, []).append(row)
+
+  # 4. 조립 (루프 1회, DB 호출 없음)
   members_with_chars = []
- 
   for user_id in user_ids:
-    # 유저 정보
-    user_result = (
-      supabase.table("users")
-      .select("id, representative")
-      .eq("id", user_id)
-      .execute()
-    )
- 
-    if not user_result.data:
+    user = user_map.get(user_id)
+    if not user:
       continue
- 
-    user = user_result.data[0]
- 
-    # 해당 유저의 캐릭터 목록 (아이템레벨 내림차순)
-    char_result = (
-      supabase.table("characters")
-      .select("*")
-      .eq("user_id", user_id)
-      .order("item_level", desc=True)
-      .execute()
-    )
- 
-    characters = []
-    for row in char_result.data:
-      row["class_name"] = row.pop("class", None)
-      characters.append(row)
- 
     members_with_chars.append({
       "user_id": user_id,
       "representative": user["representative"],
-      "characters": characters,
+      "characters": chars_by_user.get(user_id, []),
     })
- 
+
   return members_with_chars
- 
+
 # 멤버 제거
 @router.delete("/{raid_id}/members/{user_id}", status_code=204)
 async def remove_member(raid_id: str, user_id: str):
