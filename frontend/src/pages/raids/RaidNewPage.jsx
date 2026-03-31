@@ -8,12 +8,12 @@ import { createRaid } from "../../api/raids";
    ───────────────────────────────────────────── */
 const RAID_CATEGORIES = [
   { id: "all",           label: "전체" },
-  { id: "legion",        label: "군단장" },
+  { id: "abyss_dungeon", label: "어비스 던전" },
+  { id: "shadow",        label: "그림자" },
   { id: "kazeroth",      label: "카제로스" },
   { id: "epic",          label: "에픽" },
-  { id: "shadow",        label: "그림자" },
+  { id: "legion",        label: "군단장" },
   { id: "abyss_raid",    label: "어비스 레이드" },
-  { id: "abyss_dungeon", label: "어비스 던전" },
 ];
 
 const CATEGORY_LABELS = {
@@ -107,7 +107,7 @@ const RAIDS = [
   // ── 어비스 던전 ─────────────────────────────
   {
     id: "tower_chaos", category: "abyss_dungeon",
-    name: "혼돈의 상아탑", gates: 2, image: "🗼",
+    name: "혼돈의 상아탑", gates: 3, image: "🗼",
     difficulties: ["노말", "하드"], maxSlots: 4,
     entryLevel: { 노말: 1600, 하드: 1620 },
   },
@@ -123,7 +123,7 @@ const RAIDS = [
   // ── 어비스 던전 ─────────────────────────────
   {
     id: "kayangel", category: "abyss_dungeon",
-    name: "카양겔", gates: 2, image: "💎",
+    name: "카양겔", gates: 3, image: "💎",
     difficulties: ["노말", "하드"], maxSlots: 4,
     entryLevel: { 노말: 1540, 하드: 1580 },
   },
@@ -195,7 +195,7 @@ const RAIDS = [
   },
   {
     id: "elvalria", category: "abyss_dungeon",
-    name: "고대 유적 엘베리아", gates: 2, image: "🏺",
+    name: "고대유적 엘베리아", gates: 2, image: "🏺",
     difficulties: ["노말"], maxSlots: 4,
     entryLevel: { 노말: 500 },
   },

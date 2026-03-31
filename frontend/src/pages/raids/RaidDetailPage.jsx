@@ -119,15 +119,14 @@ const RAID_META = {
 
 // raid_id → 표시 이름 매핑
 const RAID_NAMES = {
-  argos: "아르고스", valtan: "발탄", biackiss: "비아키스", koukusaton: "쿠크세이튼",
-  abrelshud_legion: "아브렐슈드", illiakan: "일리아칸", kayangel: "카양겔",
-  kamen: "카멘", echidna: "서막 : 에키드나", egir: "1막 : 에기르",
-  abrelshud_kazeroth: "2막 : 아브렐슈드", mordoom: "3막 : 모르둠",
-  armorche: "4막 : 아르모체", kazeroth_boss: "종막 : 카제로스",
-  behemoth: "베히모스", serca: "세르카", tower_chaos: "혼돈의 상아탑",
+  cathedral: "지평의 성당", serca: "세르카", kazeroth_boss: "종막 : 카제로스",
+  armorche: "4막 : 아르모체", mordoom: "3막 : 모르둠",abrelshud_kazeroth: "2막 : 아브렐슈드", 
+  egir: "1막 : 에기르", echidna: "서막 : 에키드나", behemoth: "베히모스",
+  kamen: "카멘", tower_chaos: "혼돈의 상아탑", illiakan: "일리아칸", 
+  kayangel: "카양겔", abrelshud_legion: "아브렐슈드", koukusaton: "쿠크세이튼",
+  biackiss: "비아키스", valtan: "발탄", argos: "아르고스",
   oreha: "오레하의 우물", gate_paradise: "낙원의 문",
-  ark_arrogance: "오만의 방주", dream_palace: "꿈의 궁전", elvalria: "엘발리아",
-  cathedral: "지평의 성당",
+  ark_arrogance: "오만의 방주", dream_palace: "몽환의 궁전", elvalria: "고대유적 엘베리아",
 };
 
 /* ─────────────────────────────────────────────
