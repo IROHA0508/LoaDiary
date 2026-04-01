@@ -755,28 +755,38 @@ export default function MainPage() {
                 </div>
               ) : (
                 <div className="grid grid-cols-3 gap-2">
-                  {groups.map((group, index) => (
+                {groups.map((group, index) => {
+                  const isPending = !!group._pending
+                  return (
                     <div
                       key={group.id}
-                      draggable
-                      onDragStart={() => handleGroupDragStart(index)}
-                      onDragOver={(e) => handleGroupDragOver(e, index)}
-                      onDrop={handleGroupDrop}
-                      onDragEnd={handleGroupDragEnd}
-                      onClick={() => setActiveGroup(group)}
-                      className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700/80 border border-gray-700 hover:border-gray-600 rounded-lg px-2.5 py-2 transition-all cursor-pointer group/gcard"
+                      draggable={!isPending}
+                      onDragStart={() => !isPending && handleGroupDragStart(index)}
+                      onDragOver={(e) => !isPending && handleGroupDragOver(e, index)}
+                      onDrop={() => !isPending && handleGroupDrop()}
+                      onDragEnd={() => !isPending && handleGroupDragEnd()}
+                      onClick={() => !isPending && setActiveGroup(group)}
+                      className={[
+                        'flex items-center gap-2 border rounded-lg px-2.5 py-2 transition-all',
+                        isPending
+                          ? 'bg-gray-800/50 border-gray-700/50 opacity-60 cursor-not-allowed'
+                          : 'bg-gray-800 hover:bg-gray-700/80 border-gray-700 hover:border-gray-600 cursor-pointer group/gcard',
+                      ].join(' ')}
                     >
-                      {/* 드래그 핸들 */}
-                      <div
-                        onClick={e => e.stopPropagation()}
-                        className="flex-shrink-0 flex flex-col gap-[3px] opacity-20 group-hover/gcard:opacity-60 transition-opacity cursor-grab active:cursor-grabbing"
-                      >
-                        <span className="block w-[12px] h-[1.5px] bg-gray-400 rounded"/>
-                        <span className="block w-[12px] h-[1.5px] bg-gray-400 rounded"/>
-                        <span className="block w-[12px] h-[1.5px] bg-gray-400 rounded"/>
-                      </div>
+                      {/* 드래그 핸들 — 대기 중엔 숨김 */}
+                      {!isPending && (
+                        <div
+                          onClick={e => e.stopPropagation()}
+                          className="flex-shrink-0 flex flex-col gap-[3px] opacity-20 group-hover/gcard:opacity-60 transition-opacity cursor-grab active:cursor-grabbing"
+                        >
+                          <span className="block w-[12px] h-[1.5px] bg-gray-400 rounded"/>
+                          <span className="block w-[12px] h-[1.5px] bg-gray-400 rounded"/>
+                          <span className="block w-[12px] h-[1.5px] bg-gray-400 rounded"/>
+                        </div>
+                      )}
+
                       {/* 텍스트 */}
-                      <div className="flex flex-col gap-0.5 min-w-0">
+                      <div className="flex flex-col gap-0.5 min-w-0 flex-1">
                         <span className="text-sm font-medium text-gray-200 truncate group-hover/gcard:text-white transition-colors">
                           {group.name}
                         </span>
@@ -784,8 +794,23 @@ export default function MainPage() {
                           멤버 {group.members.length}명
                         </span>
                       </div>
+
+                      {/* 대기 중 스피너 */}
+                      {isPending && (
+                        <div
+                          className="flex-shrink-0 rounded-full border border-gray-700/50"
+                          style={{
+                            width: 14,
+                            height: 14,
+                            borderTopColor: '#818cf8',
+                            borderWidth: '1.5px',
+                            animation: 'mp-spin 0.75s linear infinite',
+                          }}
+                        />
+                      )}
                     </div>
-                  ))}
+                  )
+                })}
                 </div>
               )}
             </div>
@@ -1256,11 +1281,29 @@ export default function MainPage() {
       {groupCreateOpen && (
         <GroupCreateModal
           fingerprint={fingerprint}
-          myRepresentative={myRepresentative}   // 추가
+          myRepresentative={myRepresentative}
           onClose={() => setGroupCreateOpen(false)}
-          onCreated={(newGroup) => {
-            queryClient.setQueryData(['groups', fingerprint], (prev = []) => [...prev, newGroup])
+
+          /* ── 낙관적 즉시 추가 + 모달 닫기 ── */
+          onOptimisticCreate={(optimisticGroup) => {
+            queryClient.setQueryData(['groups', fingerprint], (prev = []) =>
+              [...(prev ?? []), optimisticGroup]
+            )
             setGroupCreateOpen(false)
+          }}
+
+          /* ── API 성공: tempId → 실제 그룹으로 교체 (ADD 아님 → 중복 방지) ── */
+          onCreated={(newGroup, tempId) => {
+            queryClient.setQueryData(['groups', fingerprint], (prev = []) =>
+              (prev ?? []).map(g => g.id === tempId ? newGroup : g)
+            )
+          }}
+
+          /* ── API 실패: 낙관적 항목 제거 ── */
+          onCreateError={(tempId) => {
+            queryClient.setQueryData(['groups', fingerprint], (prev = []) =>
+              (prev ?? []).filter(g => g.id !== tempId)
+            )
           }}
         />
       )}

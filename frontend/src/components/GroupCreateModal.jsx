@@ -6,7 +6,7 @@ import client from '../api/client'
    GroupCreateModal
    플로우: ① 그룹 이름 → ② 멤버 추가(API 실시간 검증) → ③ 완료
 ─────────────────────────────────────────────────────────── */
-export default function GroupCreateModal({ fingerprint, myRepresentative,onClose, onCreated }) {
+export default function GroupCreateModal({ fingerprint, myRepresentative, onClose, onOptimisticCreate, onCreated, onCreateError }) {
   const [groupName, setGroupName]           = useState('')
   // myRepresentative가 있으면 자신을 첫 멤버로 초기값에 넣기
   const [pendingMembers, setPendingMembers] = useState(
@@ -48,31 +48,45 @@ export default function GroupCreateModal({ fingerprint, myRepresentative,onClose
   }
 
   /* ── 완료: 그룹 생성 → 검증된 멤버 일괄 추가 ──── */
+  // isMounted ref 추가 (컴포넌트 상단)
+  const isMounted = useRef(true)
+  useEffect(() => () => { isMounted.current = false }, [])
+
   const handleComplete = async () => {
     if (creating) return
-    setCreating(true)
-    setAddError('')
 
-    let latestGroup = null
+    // ── 1. 낙관적 그룹 즉시 생성 ──
+    const tempId = `temp_${Date.now()}`
+    const optimisticGroup = {
+      id: tempId,
+      name: groupName.trim() || '새 그룹',
+      members: pendingMembers.map((m, i) => ({
+        member_row_id: `temp_${i}`,
+        representative: m.representative,
+        user_id: null,
+        sort_order: i,
+      })),
+      _pending: true,
+    }
 
+    // ── 2. 즉시 모달 닫기 + 낙관적 UI 반영 ──
+    onOptimisticCreate(optimisticGroup, tempId)
+    onClose()
+
+    // ── 3. 백그라운드에서 API 처리 ──
     try {
-      latestGroup = await createGroup(fingerprint, groupName.trim() || null)
-      // 멤버 추가 — 각 응답이 최신 그룹 전체를 반환하므로 마지막 응답을 사용
+      let latestGroup = await createGroup(fingerprint, groupName.trim() || null)
       for (const m of pendingMembers) {
-        if (m.isSelf) continue  // 자신은 백엔드 그룹 생성 시 자동으로 추가됨
+        if (m.isSelf) continue
         try {
           const updated = await addGroupMember(latestGroup.id, m.representative)
           if (updated) latestGroup = updated
         } catch {}
       }
-    } catch{
-      setAddError('그룹 생성에 실패했습니다.')
-      setCreating(false)
-      return
+      onCreated(latestGroup, tempId)   // tempId → 실제 그룹으로 교체
+    } catch {
+      onCreateError(tempId)            // 실패 시 낙관적 항목 제거
     }
-    setCreating(false)
-    onCreated(latestGroup)  // 멤버가 모두 반영된 최신 그룹 전달
-    onClose()
   }
 
   return (
