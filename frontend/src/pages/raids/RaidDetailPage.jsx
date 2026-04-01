@@ -777,7 +777,7 @@ export default function RaidDetailPage() {
                             name: slot.character_name,
                             class_name: slot.class_name,
                             is_support: slot.is_support,
-                            item_level: null,
+                            item_level: slot.item_level ?? null,
                           })
                         : null;
 

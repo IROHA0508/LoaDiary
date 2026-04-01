@@ -322,7 +322,7 @@ async def get_slots(raid_id: str):
   character_ids = list(set(s["character_id"] for s in slots))
   char_result = (
     supabase.table("characters")
-    .select("id, name, class, is_support")
+    .select("id, name, class, is_support, item_level")
     .in_("id", character_ids)
     .execute()
   )
@@ -336,6 +336,7 @@ async def get_slots(raid_id: str):
     slot["character_name"] = char["name"] if char else None
     slot["class_name"] = char["class"] if char else None       # DB 컬럼명은 "class"
     slot["is_support"] = char.get("is_support") if char else None
+    slot["item_level"] = char.get("item_level") if char else None
  
   return slots
 

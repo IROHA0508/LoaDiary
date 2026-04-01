@@ -91,6 +91,7 @@ class RaidSlotResponse(BaseModel):
   character_name: Optional[str] = None
   class_name: Optional[str] = None
   is_support: Optional[bool] = None
+  item_level: Optional[float] = None
   slot_order: int
   role: Optional[str]
 
