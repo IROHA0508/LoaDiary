@@ -33,6 +33,41 @@ const GRADE_COLORS = {
 
 const ARK_COLORS = { '진화': '#f59e0b', '깨달음': '#60a5fa', '도약': '#22c55e' }
 
+/* HTML 태그 제거 */
+function stripHtml(str) {
+  if (!str) return ''
+  return str.replace(/<[^>]*>/g, '').trim()
+}
+
+/**
+ * 아크패시브 Description 파싱
+ * API 원문 예시: "<FONT color='#F1D594'>진화</FONT> 1티어 특화 Lv.10"
+ * stripHtml 후: "진화 1티어 특화 Lv.10"
+ * → { tier: 1, skillName: "특화", lv: 10 }
+ *
+ * Level / Point 필드가 있으면 그것을 우선 사용하고,
+ * 없으면 Description 문자열에서 정규식으로 추출
+ */
+function parseArkNode(ef) {
+  const desc = stripHtml(ef.Description || '')
+  // 우선 Level/Point 필드 확인 (API가 숫자형으로 반환하는 경우)
+  if (typeof ef.Level === 'number' && typeof ef.Point === 'number') {
+    // skillName: Description에서 카테고리·티어·Lv 부분 제거
+    const nameOnly = desc
+      .replace(/^(?:진화|깨달음|도약)\s*/, '')   // 앞 카테고리 제거
+      .replace(/^\d+티어\s*/, '')                 // 앞 티어 제거
+      .replace(/\s*Lv\.\d+$/, '')                // 뒤 Lv 제거
+      .trim()
+    return { tier: ef.Level, skillName: nameOnly || desc, lv: ef.Point }
+  }
+  // 필드 없는 경우: Description 정규식 파싱
+  // 패턴: "{카테고리} {N}티어 {스킬명} Lv.{M}"
+  const m = desc.match(/^(?:진화|깨달음|도약)\s+(\d+)티어\s+(.+?)\s+Lv\.(\d+)$/)
+  if (m) return { tier: Number(m[1]), skillName: m[2], lv: Number(m[3]) }
+  // 파싱 실패 시 원문 그대로
+  return { tier: null, skillName: desc, lv: null }
+}
+
 function gradeColor(g) { return GRADE_COLORS[g] || '#94a3b8' }
 
 function levelColor(lv) {
@@ -103,18 +138,46 @@ function Tab({ label, active, onClick }) {
     </button>
   )
 }
-
-function Spinner() {
+/* ── 스켈레톤 로더 (체감 로딩 시간 단축) ── */
+function SkeletonLoader() {
   return (
-    <div className="flex flex-col items-center justify-center py-20 gap-3">
-      <div style={{
-        width: 32, height: 32,
-        border: '3px solid rgba(245,158,11,0.15)',
-        borderTop: '3px solid #f59e0b',
-        borderRadius: '50%',
-        animation: 'spin 0.8s linear infinite',
-      }} />
-      <p className="text-xs text-gray-600">불러오는 중...</p>
+    <div className="space-y-6 animate-pulse">
+      {/* 장비 섹션 스켈레톤 */}
+      <div>
+        <div className="h-3 w-24 bg-gray-800 rounded mb-3" />
+        <div className="flex gap-2">
+          <div className="flex flex-col gap-1.5 flex-1">
+            {Array.from({ length: 7 }, (_, i) => (
+              <div key={i} className="h-[52px] bg-gray-800/60 rounded-lg" />
+            ))}
+          </div>
+          <div className="flex flex-col gap-1.5 flex-1">
+            {Array.from({ length: 8 }, (_, i) => (
+              <div key={i} className="h-[52px] bg-gray-800/60 rounded-lg" />
+            ))}
+          </div>
+        </div>
+      </div>
+      {/* 보석 스켈레톤 */}
+      <div>
+        <div className="h-3 w-16 bg-gray-800 rounded mb-3" />
+        <div className="grid grid-cols-11 gap-1.5">
+          {Array.from({ length: 11 }, (_, i) => (
+            <div key={i} className="aspect-square bg-gray-800/60 rounded-lg" />
+          ))}
+        </div>
+      </div>
+      {/* 특성 스켈레톤 */}
+      <div className="grid grid-cols-2 gap-4">
+        {[0, 1].map(i => (
+          <div key={i} className="space-y-1.5">
+            <div className="h-3 w-20 bg-gray-800 rounded mb-2" />
+            {Array.from({ length: 3 }, (_, j) => (
+              <div key={j} className="h-9 bg-gray-800/60 rounded-lg" />
+            ))}
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
@@ -163,7 +226,7 @@ function EquipSlot({ item }) {
   return (
     <div className="flex items-center gap-2.5 bg-gray-800/50 border rounded-lg px-2.5 py-2" style={{ borderColor: col + '44' }}>
       {item.Icon
-        ? <img src={item.Icon} alt={item.Type} className="w-9 h-9 rounded flex-shrink-0 object-cover" style={{ border: `1.5px solid ${col}66` }} />
+        ? <img src={item.Icon} alt={item.Type} loading="lazy" decoding="async" className="w-9 h-9 rounded flex-shrink-0 object-cover" style={{ border: `1.5px solid ${col}66` }}/>
         : <div className="w-9 h-9 rounded bg-gray-700 flex-shrink-0" />
       }
       <div className="flex-1 min-w-0">
@@ -234,26 +297,32 @@ function TabStats({ armory }) {
 
       </div>
 
-      {/* 보석 — 장비 바로 아래 전폭 표시 */}
+      {/* 보석 — 장비 섹션 너비에 맞춘 11컬럼 그리드 */}
       {gems.length > 0 && (
         <div>
           <SectionTitle>보석</SectionTitle>
-          <div className="flex flex-wrap gap-1.5 mb-3">
-            {/* 11슬롯 기준 빈 자리도 표시 */}
-            {Array.from({ length: Math.max(gems.length, 11) }, (_, i) => {
+          <div className="grid gap-1.5 mb-3" style={{ gridTemplateColumns: 'repeat(11, 1fr)' }}>
+            {Array.from({ length: 11 }, (_, i) => {
               const gem = gems[i]
               return gem ? (
                 <div key={i} className="flex flex-col items-center gap-1" title={gem.Name}>
-                  {gem.Icon
-                    ? <img src={gem.Icon} alt={gem.Name} className="w-10 h-10 rounded-lg border border-gray-700 object-cover" />
-                    : <div className="w-10 h-10 rounded-lg bg-gray-700" />
-                  }
-                  <span className="text-[9px] text-gray-500">{gem.Level ?? ''}레벨</span>
+                  {gem.Icon ? (
+                    <img
+                      src={gem.Icon}
+                      alt={gem.Name}
+                      loading="lazy"
+                      decoding="async"
+                      className="w-full aspect-square rounded-lg border border-gray-700 object-cover"
+                    />
+                  ) : (
+                    <div className="w-full aspect-square rounded-lg bg-gray-700" />
+                  )}
+                  <span className="text-[12px] text-white-500 leading-none">{gem.Level ?? ''}레벨</span>
                 </div>
               ) : (
                 <div key={i} className="flex flex-col items-center gap-1">
-                  <div className="w-10 h-10 rounded-lg bg-gray-800/40 border border-gray-700/30" />
-                  <span className="text-[9px] text-gray-700">—</span>
+                  <div className="w-full aspect-square rounded-lg bg-gray-800/40 border border-gray-700/30" />
+                  <span className="text-[9px] text-gray-700 leading-none">—</span>
                 </div>
               )
             })}
@@ -333,67 +402,193 @@ function TabStats({ armory }) {
         </div>
       )}
 
-      {/* ── 아크 패시브 포인트 & 세부 효과 ── */}
+      {/* ── 아크 패시브 — 사진4 스타일 ── */}
       {arkPoints.length > 0 && (
         <div>
           <SectionTitle>아크 패시브</SectionTitle>
-          {/* 포인트 요약 */}
-          <div className="grid grid-cols-3 gap-2 mb-3">
-            {arkPoints.map(p => (
-              <div key={p.Name} className="rounded-lg px-3 py-3 text-center border"
-                style={{ background: `${ARK_COLORS[p.Name]}10`, borderColor: `${ARK_COLORS[p.Name]}30` }}>
-                <p className="text-[10px] font-bold mb-1" style={{ color: ARK_COLORS[p.Name] }}>{p.Name}</p>
-                <p className="text-lg font-bold text-white">{p.Value}</p>
-                <p className="text-[10px] text-gray-500 mt-0.5">포인트</p>
-              </div>
-            ))}
-          </div>
-          {/* 세부 효과 */}
-          {arkEffects.length > 0 && (
-            <div className="space-y-2">
-              {arkEffects.map((ef, i) => (
-                <div key={i} className="bg-gray-800/50 rounded-lg px-3 py-2.5">
-                  <div className="flex items-center gap-2 mb-1">
-                    {ef.Icon && <img src={ef.Icon} alt="" className="w-5 h-5 rounded flex-shrink-0" />}
-                    <p className="text-xs font-semibold text-gray-300">{ef.Name}</p>
-                    {ef.Level && <span className="text-[10px] text-gray-500">Lv.{ef.Level}</span>}
-                  </div>
-                  {ef.Description && <p className="text-[11px] text-gray-500">{ef.Description}</p>}
+
+          {/* 포인트 헤더 + 랭크/레벨 — 3열 */}
+          <div className="grid grid-cols-3 gap-2 mb-5">
+            {arkPoints.map(p => {
+              const catName = stripHtml(p.Name)
+              const col = ARK_COLORS[catName] || '#94a3b8'
+
+              return (
+                <div key={catName} className="rounded-xl px-4 py-5 border flex flex-col items-center text-center"
+                  style={{ background: `${col}12`, borderColor: `${col}40` }}>
+                  {/* 카테고리 뱃지 */}
+                  <span className="text-xs font-bold px-2 py-0.5 rounded-md mb-3"
+                    style={{ background: `${col}30`, color: col }}>
+                    {catName}
+                  </span>
+                  {/* 포인트 수치 */}
+                  <p className="text-4xl font-bold text-white leading-none">{p.Value}</p>
+                  <p className="text-xs text-gray-400 mt-1">포인트</p>
+                  {/* 랭크·레벨 */}
+                  {p.Description && (
+                    <p className="text-sm font-semibold mt-3 w-full border-t pt-3 text-center"
+                      style={{ color: col, borderColor: `${col}30` }}>
+                      {p.Description}
+                    </p>
+                  )}
                 </div>
-              ))}
-            </div>
-          )}
+              )
+            })}
+          </div>
+
+          {arkEffects.length > 0 && (() => {
+            // ★ 최적화: grouped 빌드를 reduce로 한 번에 처리
+            const grouped = arkEffects.reduce((acc, ef) => {
+              if (acc[ef.Name]) acc[ef.Name].push(ef)
+              return acc
+            }, { '진화': [], '깨달음': [], '도약': [] })
+
+            // ★ 최적화: 파싱 결과를 미리 캐싱 (같은 arkEffects로 중복 파싱 방지)
+            const parsed = arkEffects.map(ef => {
+              const plain = stripHtml(ef.Description || '')
+              const m = plain.match(/^(?:진화|깨달음|도약)\s+(\d+)티어\s+(.+?)\s+Lv\.(\d+)$/)
+              return {
+                ef,
+                tier:      m ? Number(m[1]) : null,
+                skillName: m ? m[2] : plain,
+                lv:        m ? Number(m[3]) : null,
+              }
+            })
+            // 카테고리별로 parsed 결과 재그룹
+            const parsedGrouped = { '진화': [], '깨달음': [], '도약': [] }
+            parsed.forEach(item => {
+              if (parsedGrouped[item.ef.Name]) parsedGrouped[item.ef.Name].push(item)
+            })
+
+            const cats = ['진화', '깨달음', '도약']
+            return (
+              <div className="grid grid-cols-3 gap-x-4 gap-y-0">
+                {cats.map(cat => {
+                  const col = ARK_COLORS[cat]
+                  return (
+                    <div key={cat}>
+                      {/* 컬럼 헤더 */}
+                      <p className="text-sm font-bold mb-3 pb-2 border-b"
+                        style={{ color: col, borderColor: `${col}40` }}>
+                        {cat}
+                      </p>
+                      <div className="space-y-1.5">
+                        {parsedGrouped[cat].length === 0
+                          ? <p className="text-xs text-gray-600">—</p>
+                          : parsedGrouped[cat].map(({ ef, tier, skillName, lv }, i) => (
+                            <div key={i}
+                              className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 hover:bg-gray-800/60 transition-colors"
+                              style={{ background: 'rgba(255,255,255,0.03)' }}>
+                              {ef.Icon ? (
+                                <img src={ef.Icon} alt="" loading="lazy" decoding="async"
+                                  className="w-8 h-8 rounded-md flex-shrink-0" />
+                              ) : (
+                                <div className="w-8 h-8 rounded-md bg-gray-700/50 flex-shrink-0" />
+                              )}
+                              <div className="flex-1 min-w-0 flex items-baseline gap-1.5 flex-wrap">
+                                {/* 티어 — 회색, 크기 업 */}
+                                {tier !== null && (
+                                  <span className="text-[10px] text-gray-400 flex-shrink-0 whitespace-nowrap">
+                                    {tier}티어
+                                  </span>
+                                )}
+                                {/* 스킬명 — 흰색, 크기 업 */}
+                                <span className="text-xs font-medium truncate flex-1 min-w-0" style={{ color: col }}>
+                                  {skillName}
+                                </span>
+                                {/* Lv.N — 카테고리 컬러, 크기 업 */}
+                                {lv !== null && (
+                                  <span className="text-xs font-bold flex-shrink-0 whitespace-nowrap"
+                                    style={{ color: col }}>
+                                    Lv.{lv}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          ))
+                        }
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          })()}
         </div>
       )}
 
       {/* 보석: 장비 섹션 내에서 표시 */}
 
-      {/* ── 카드 ── */}
+      {/* ── 카드 — 사진4 스타일 ── */}
       {cards.length > 0 && (
         <div>
-          <SectionTitle>카드</SectionTitle>
-          <div className="grid grid-cols-3 gap-2 mb-3">
+          {/* 헤더: "카드" 제목 + 세트명 우측 */}
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">카드</h3>
+            {cardEffects.length > 0 && (
+              <span className="text-[10px] text-amber-400/70">
+                {cardEffects[cardEffects.length - 1]?.Items?.[0]?.Name || ''}{' '}
+                {cards.length}각
+              </span>
+            )}
+          </div>
+
+          {/* 카드 가로 스크롤 */}
+          <div
+            className="flex gap-2 mb-4 pb-1 overflow-x-auto"
+            style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(100,116,139,0.2) transparent' }}
+          >
             {cards.map(card => (
-              <div key={card.Slot} className="bg-gray-800/50 rounded-lg overflow-hidden border border-gray-700/40">
-                {card.Icon && <img src={card.Icon} alt={card.Name} className="w-full object-cover" style={{ maxHeight: 72 }} />}
-                <div className="p-1.5">
-                  <p className="text-[10px] text-gray-300 truncate">{card.Name}</p>
-                  <p className="text-[9px] text-gray-600 mt-0.5">각성 {card.AwakeCount}/{card.AwakeTotal}</p>
+              <div key={card.Slot}
+                className="flex-shrink-0 w-[110px] bg-gray-800/50 rounded-xl overflow-hidden border border-gray-700/40">
+                {/* 카드 이미지 비율 1:1.45 고정 */}
+                <div style={{ aspectRatio: '1 / 1.45', overflow: 'hidden' }}>
+                  {card.Icon ? (
+                    <img
+                      src={card.Icon}
+                      alt={card.Name}
+                      loading="lazy"
+                      decoding="async"
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-gray-700/40" />
+                  )}
+                </div>
+                <div className="px-1.5 pb-1.5 pt-1">
+                  <p className="text-[9px] text-gray-300 truncate leading-tight">{card.Name}</p>
+                  {/* 각성 점 표시 */}
+                  <div className="flex gap-0.5 mt-1 flex-wrap">
+                    {Array.from({ length: card.AwakeTotal || 0 }, (_, k) => (
+                      <div key={k}
+                        className="w-2 h-2 rounded-full"
+                        style={{
+                          background: k < (card.AwakeCount || 0) ? '#f59e0b' : 'rgba(100,116,139,0.3)',
+                        }}
+                      />
+                    ))}
+                  </div>
                 </div>
               </div>
             ))}
           </div>
+
+          {/* 세트 효과 */}
           {cardEffects.length > 0 && (
             <div className="space-y-2">
               {cardEffects.map((ef, i) => (
-                <div key={i} className="bg-gray-800/50 rounded-lg px-3 py-2.5 border-l-2 border-amber-500/40">
-                  <p className="text-[10px] text-amber-400 font-bold mb-1">{ef.CardSlots}장 세트 효과</p>
-                  {ef.Items?.map((item, j) => (
-                    <div key={j}>
-                      <p className="text-xs font-medium text-gray-300">{item.Name}</p>
-                      {item.Description && <p className="text-[11px] text-gray-500">{item.Description}</p>}
-                    </div>
-                  ))}
+                <div key={i} className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2.5">
+                  <p className="text-[10px] font-bold text-amber-400 mb-1.5">{ef.CardSlots}장 세트 효과</p>
+                  <div className="space-y-1">
+                    {ef.Items?.map((item, j) => (
+                      <div key={j}>
+                        <p className="text-[11px] font-semibold text-gray-300">{item.Name}</p>
+                        {item.Description && (
+                          <p className="text-[10px] text-gray-500 mt-0.5 leading-relaxed">{item.Description}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ))}
             </div>
@@ -555,7 +750,7 @@ export default function CharacterDetailPage() {
         </div>
       )
     }
-    if (armoryLoading) return <Spinner />
+    if (armoryLoading) return <SkeletonLoader />
 
     switch (activeTab) {
       case 'stats':    return <TabStats armory={armory} />
@@ -603,16 +798,22 @@ export default function CharacterDetailPage() {
             {/* ════════════════════════════════════
                 좌측 프로필 패널 (sticky)
                 ════════════════════════════════════ */}
-            <div className="flex-shrink-0 w-52 sticky top-[60px]">
+            <div className="flex-shrink-0 w-85 sticky top-[60px]">
               <div className="bg-gray-900/70 border border-gray-800/60 rounded-2xl overflow-hidden">
 
-                {/* 캐릭터 이미지 — 전신 크게 */}
-                <div className="relative" style={{ height: 260 }}>
+                {/* 캐릭터 이미지 — 상반신(얼굴) 위주 */}
+                <div className="relative" style={{ height: 320, overflow: 'hidden' }}>
                   {profile.CharacterImage ? (
-                    <img src={profile.CharacterImage} alt={name}
+                    <img
+                      src={profile.CharacterImage}
+                      alt={name}
+                      loading="lazy"
+                      decoding="async"
                       style={{
-                        width: '100%', height: '100%',
-                        objectFit: 'cover', objectPosition: 'center 15%',
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover',
+                        objectPosition: 'center 5%',
                       }}
                     />
                   ) : (
