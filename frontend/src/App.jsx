@@ -18,9 +18,6 @@ import { getUser } from './api/users'
 // export default로 내보낸 컴포넌트는 중괄호 없이 import 가능
 import Layout from './components/Layout'
 
-// AppRoutes 컴포넌트 내부
-const location = useLocation()
-
 // 모든 페이지를 lazy import로 전환
 const OnboardingPage     = lazy(() => import('./pages/OnboardingPage'))
 const MainPage           = lazy(() => import('./pages/MainPage'))
@@ -47,8 +44,10 @@ const queryClient = new QueryClient({
 function AppRoutes(){
   const {fingerprint, loading} = useUser()
   const navigate = useNavigate()
-
-
+  
+  // AppRoutes 컴포넌트 내부
+  const location = useLocation()
+  
   useEffect(() => {
     if (loading || !fingerprint) return
     // 이미 온보딩 페이지에 있으면 체크 불필요
