@@ -11,7 +11,7 @@ import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from
 
 // QueryClient : TanStack Query의 캐시와 설정을 관리하는 객체
 // QueryClientProvider : 앱 전체에서 useQuery를 쓸 수 있게 감싸주는 컴포넌트. Python의 전역 설정 객체와 비슷한 개념
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query'
 import { useUser } from './hooks/useUser'
 import { getUser } from './api/users'
 
@@ -44,6 +44,7 @@ const queryClient = new QueryClient({
 function AppRoutes(){
   const {fingerprint, loading} = useUser()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   
   // AppRoutes 컴포넌트 내부
   const location = useLocation()
@@ -55,11 +56,14 @@ function AppRoutes(){
 
     const checkUser = async () => {
       try {
-        await getUser(fingerprint)
+        // queryClient를 통해 캐시에 저장 → MainPage의 ['user', fingerprint]와 공유
+        await queryClient.fetchQuery({
+          queryKey: ['user', fingerprint],
+          queryFn: () => getUser(fingerprint),
+          staleTime: 1000 * 30,
+        })
       } catch(e) {
-        if (e?.response?.status === 404) {
-          navigate('/onboarding')
-        }
+        if (e?.response?.status === 404) navigate('/onboarding')
       }
     }
     checkUser()
