@@ -489,6 +489,8 @@ export default function RaidDetailPage() {
         return result;
       });
 
+      navigate("/");
+      
     } catch (err) {
       showToast(err.message || "저장에 실패했습니다.");
       // 실패 시 savedSlots로 롤백
@@ -715,15 +717,11 @@ export default function RaidDetailPage() {
               </div>
 
               <div style={styles.headerActionRow}>
-                {/* 변경사항이 있을 때만 저장/되돌리기 버튼 표시 */}
-                {isDirty ? (
+                {/* 변경사항이 있을 때만 저장/되돌리기 표시, 없으면 아무것도 표시 안 함 */}
+                {isDirty && (
                   <>
                     <div
-                      style={{
-                        ...styles.saveBtn,
-                        opacity: isSaving ? 0.6 : 1,
-                        cursor: isSaving ? "not-allowed" : "pointer",
-                      }}
+                      style={{ ...styles.saveBtn, opacity: isSaving ? 0.6 : 1, cursor: isSaving ? "not-allowed" : "pointer" }}
                       onClick={!isSaving ? handleSaveSlots : undefined}
                     >
                       {isSaving ? "저장 중..." : "✓ 저장"}
@@ -735,13 +733,6 @@ export default function RaidDetailPage() {
                       되돌리기
                     </div>
                   </>
-                ) : (
-                  <div
-                    style={styles.doneBtn}
-                    onClick={() => navigate("/")}
-                  >
-                    ✓ 배치 완료
-                  </div>
                 )}
                 <div
                   style={styles.editBtn}
@@ -1154,7 +1145,7 @@ const styles = {
     fontSize: 14,
   },
   header: {
-    padding: "20px 40px",
+    padding: "20px 0",
     borderBottom: "1px solid rgba(248,250,252,0.06)",
     background: "rgba(15,23,42,0.8)",
     backdropFilter: "blur(12px)",
@@ -1180,13 +1171,13 @@ const styles = {
   },
   headerCenter: {
     width: "100%",
-    maxWidth: 1100,
+    maxWidth: 1400,
     margin: "0 auto",
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
     gap: 10,
-    padding: "0 16px",
+    padding: "0 32px",
     boxSizing: "border-box",
     minWidth: 0,
   },
@@ -1228,7 +1219,7 @@ const styles = {
   },
   headerActionRow: {
     position: "absolute",
-    right: 32,
+    right: 0,
     top: "50%",
     transform: "translateY(-50%)",
     display: "flex",
@@ -1271,9 +1262,9 @@ const styles = {
     display: "flex",
     flexDirection: "column",
     gap: 24,
-    padding: "24px 40px",
+    padding: "24px 32px",
     width: "100%",
-    maxWidth: 1100,
+    maxWidth: 1400,
     margin: "0 auto",
     boxSizing: "border-box",
   },
@@ -1417,11 +1408,11 @@ const styles = {
     maxHeight: 480,
   },
   repListPanel: {
-    width: 180,
+    width: 220,
     flexShrink: 0,
     display: "flex",
     flexDirection: "column",
-    gap: 4,
+    gap: 8,
     overflowY: "auto",
     // 스크롤바와 콘텐츠 사이 간격 확보
     paddingRight: 10,
@@ -1506,7 +1497,7 @@ const styles = {
   charDetailGrid: {
     display: "grid",
     // 고정 2열 — 이름이 긴 캐릭터도 잘리지 않도록 충분한 너비 확보
-    gridTemplateColumns: "repeat(2, 1fr)",
+    gridTemplateColumns: "repeat(3, 1fr)",
     gap: 8,
     overflowY: "auto",
   },

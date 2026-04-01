@@ -97,15 +97,15 @@ async def get_joined_raids(fingerprint: str):
 # - 프론트엔드에서 현재 인스턴스를 제외한 나머지로 주간 중복 참여를 판단
 @router.get("/weekly-used-slots", response_model=List[WeeklyUsedSlotResponse])
 async def get_weekly_used_slots(
-  raid_type: str = Query(..., description="레이드 종류 id (e.g. 'serca', 'kamen')"),
+  raid_type: str = Query(..., description="레이드 종류 id (e.g. 'valtan', 'behemoth')"),
   week_start: str = Query(..., description="이번 주 초기화 시각 (ISO 8601 UTC)"),
 ):
-  # 1. 해당 raid_type의 이번 주 레이드 인스턴스 id 목록 조회
+  # 1. 해당 raid_type의 모든 인스턴스 조회 (날짜 필터 제거)
+  #    레이드가 언제 만들어졌든, 슬롯 저장일 기준으로 주간 잠금 판단
   raid_result = (
     supabase.table("raids")
     .select("id")
     .eq("raid_id", raid_type)
-    .gte("created_at", week_start)
     .execute()
   )
 
@@ -114,11 +114,13 @@ async def get_weekly_used_slots(
 
   raid_instance_ids = [r["id"] for r in raid_result.data]
 
-  # 2. 해당 인스턴스들의 슬롯 조회
+  # 2. 이번 주에 저장된 슬롯만 조회 (슬롯 created_at 기준)
+  #    → 이전 주 만든 레이드에 이번 주 추가된 슬롯도 정확히 잠금 처리
   slot_result = (
     supabase.table("raid_slots")
     .select("raid_id, character_id")
     .in_("raid_id", raid_instance_ids)
+    .gte("created_at", week_start)   # ← 핵심 변경: 슬롯 저장일 기준
     .execute()
   )
 
@@ -252,11 +254,13 @@ async def get_all_raids_with_slots(fingerprint: str):
             slots_by_raid[rid] = []
         slots_by_raid[rid].append(slot)
 
-    # 6. 각 레이드에 slots 필드 포함해서 반환
+    # 6. 슬롯이 1개 이상 있는 레이드만 반환
+    # - 내가 만든 빈 레이드(0명 배치)는 메인페이지에 노출되지 않음
+    # - joined_raid_ids는 내 캐릭터가 이미 슬롯에 있으므로 항상 slots_by_raid에 포함됨
     for raid in raids:
         raid["slots"] = slots_by_raid.get(raid["id"], [])
 
-    return raids
+    return [r for r in raids if r["slots"]]
 
 # 단일 레이드 조회
 @router.get("/{raid_id}", response_model=RaidResponse)
@@ -384,23 +388,25 @@ async def add_slot(raid_id: str, payload: RaidSlotCreate):
               - timedelta(days=days_back)
   week_start_iso = reset_utc.isoformat()
 
-  # 같은 raid_id(종류)의 이번 주 인스턴스 조회
+  # 같은 raid_id(종류)의 모든 인스턴스 조회 (날짜 필터 없음)
   same_type_raids = (
     supabase.table("raids")
     .select("id")
     .eq("raid_id", raid_info["raid_id"])
-    .gte("created_at", week_start_iso)
-    .neq("id", raid_id)          # 현재 인스턴스는 제외
+    .neq("id", raid_id)          # 현재 인스턴스 제외
     .execute()
   )
 
   if same_type_raids.data:
     other_ids = [r["id"] for r in same_type_raids.data]
+    # 슬롯 저장일(created_at) 기준으로 이번 주 중복 체크
+    # 레이드가 언제 만들어졌든 관계없이 슬롯이 이번 주에 추가됐으면 잠금
     already_used = (
       supabase.table("raid_slots")
       .select("id")
       .in_("raid_id", other_ids)
       .eq("character_id", payload.character_id)
+      .gte("created_at", week_start_iso)   # ← 슬롯 저장일 기준
       .execute()
     )
     if already_used.data:

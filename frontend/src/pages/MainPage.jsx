@@ -17,7 +17,7 @@ import { useCallback } from 'react'
    레이드 섹션 레이아웃 상수
    ───────────────────────────────────────────── */
 const RAID_SCROLL_THRESHOLD = 6   // 이 개수 이상이면 스크롤 활성화
-const RAID_SECTION_MAX_HEIGHT = 672  // 스크롤 활성화 시 섹션 최대 높이(px)
+const RAID_SECTION_MAX_HEIGHT = 480  // 스크롤 활성화 시 섹션 최대 높이(px)
 
 /* ─────────────────────────────────────────────
    난이도 배지 스타일
@@ -610,6 +610,18 @@ export default function MainPage() {
         .group-grid-scroll::-webkit-scrollbar-thumb:hover {
           background: rgba(107, 114, 128, 0.65);
         }
+
+        /* ── 로딩 스피너 ── */
+        @keyframes mp-spin { to { transform: rotate(360deg); } }
+        .mp-spinner {
+          width: 22px;
+          height: 22px;
+          border-radius: 50%;
+          border: 2px solid rgba(99, 102, 241, 0.15);
+          border-top-color: #818cf8;
+          animation: mp-spin 0.75s linear infinite;
+          flex-shrink: 0;
+        }
       `}</style>
 
       {/* ── 바디 레이아웃 — Layout 헤더와 동일한 max-w-[1400px] px-8 flex gap-5 ── */}
@@ -648,8 +660,9 @@ export default function MainPage() {
               style={{ height: '152px' }}
             >
               {groupLoading ? (
-                <div className="flex items-center justify-center h-full text-sm text-gray-500">
-                  불러오는 중...
+                <div className="flex flex-col items-center justify-center h-full gap-2">
+                  <div className="mp-spinner" />
+                  <span className="text-xs text-gray-600">불러오는 중...</span>
                 </div>
               ) : groups.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full">
@@ -722,7 +735,10 @@ export default function MainPage() {
 
             {/* 레이드 목록 */}
             {raidLoading ? (
-              <div className="flex items-center justify-center h-full px-4 py-5 text-sm text-gray-500">불러오는 중...</div>
+              <div className="flex flex-col items-center justify-center gap-2 py-10">
+                <div className="mp-spinner" />
+                <span className="text-sm text-gray-500">불러오는 중...</span>
+              </div>
             ) : raids.length === 0 ? (
               <div className="flex flex-col items-center justify-center text-center" style={{ height: `${RAID_SECTION_MAX_HEIGHT}px` }}>
                 <p className="text-sm text-gray-500">참여 중인 레이드가 없어요.</p>
