@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useTransition } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useUser } from "../../hooks/useUser";
 import { supabase } from "../../lib/supabase";
@@ -207,25 +207,29 @@ export default function RaidDetailPage() {
     } catch {}
   };
 
+  // isSaving Ref 추가 (상단 state 선언부 근처)
+  const isSavingRef = useRef(false);
+
   /* ── Realtime 구독 ──────────────────────────── */
   useEffect(() => {
     if (!raidId) return;
 
+    // 리얼타임 구독에서 내가 저장 중일 때는 무시
     const slotsChannel = supabase
-    .channel(`raid_slots:${raidId}`)
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "raid_slots", filter: `raid_id=eq.${raidId}` },
-      async () => {
-        // 멤버는 로컬 상태이므로 슬롯만 갱신
-        const updatedSlots = await API.getSlots(raidId);
-        setSavedSlots(updatedSlots);
-        if (!isDirtyRef.current) {
-          setPendingSlots(updatedSlots);
+      .channel(`raid_slots:${raidId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "raid_slots", filter: `raid_id=eq.${raidId}` },
+        async () => {
+          if (isSavingRef.current) return;  // ← 추가: 내가 저장 중이면 무시
+          const updatedSlots = await API.getSlots(raidId);
+          setSavedSlots(updatedSlots);
+          if (!isDirtyRef.current) {
+            setPendingSlots(updatedSlots);
+          }
         }
-      }
-    )
-    .subscribe();
+      )
+      .subscribe();
 
     const membersChannel = supabase
       .channel(`raid_members:${raidId}`)
@@ -296,77 +300,77 @@ export default function RaidDetailPage() {
             }
           });
         });
-
+        
         // ── 규칙2, 3: 최근 검색 (내 원정대 제외) ──
         const recentReps = loadRecentMembers().filter(r => r !== myRep);
         setRecentMemberReps(new Set(recentReps));
-
+        
         // ── 규칙1: 최근 + 그룹 합치기 (중복 제거, 최근 우선) ──
         const allRepsToLoad = [
           ...recentReps,
           ...groupMemberReps.filter(r => !recentReps.includes(r)),
         ];
-
+        
         // ── DB 배치 조회 1번으로 모든 캐릭터 가져오기 ──
         if (allRepsToLoad.length > 0) {
           try {
             const loadedMembers = await API.getCharactersByReps(allRepsToLoad);
-
+            
             // allRepsToLoad 순서 유지 (최근 → 그룹 순)
             const repOrder = new Map(allRepsToLoad.map((r, i) => [r, i]));
             const sorted = [...loadedMembers].sort((a, b) =>
               (repOrder.get(a.representative) ?? 999) - (repOrder.get(b.representative) ?? 999)
-            );
-
-            setMembers(sorted);
-            // 내 원정대 기본 선택, 없으면 첫 번째 멤버
-            setSelectedRep(myRep ?? sorted[0]?.representative ?? null);
-          } catch {
-            setSelectedRep(myRep);
-          }
-        } else {
+          );
+          
+          setMembers(sorted);
+          // 내 원정대 기본 선택, 없으면 첫 번째 멤버
+          setSelectedRep(myRep ?? sorted[0]?.representative ?? null);
+        } catch {
           setSelectedRep(myRep);
         }
-
-        // 주간 사용 슬롯
-        try {
-          const weeklySlots = await API.getWeeklyUsedSlots(raidData.raid_id, getWeekStart());
-          const usedIds = new Set(
-            weeklySlots
-              .filter((s) => s.raid_instance_id !== raidId)
-              .map((s) => s.character_id)
-          );
-          setWeeklyUsedCharIds(usedIds);
-        } catch {}
-
-      } catch (e) {
-        setError(e.message);
-      } finally {
-        setLoading(false);
+      } else {
+        setSelectedRep(myRep);
       }
+      
+      // 주간 사용 슬롯
+      try {
+        const weeklySlots = await API.getWeeklyUsedSlots(raidData.raid_id, getWeekStart());
+        const usedIds = new Set(
+          weeklySlots
+          .filter((s) => s.raid_instance_id !== raidId)
+          .map((s) => s.character_id)
+        );
+        setWeeklyUsedCharIds(usedIds);
+      } catch {}
+      
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
     };
 
     load();
   }, [raidId, fingerprint]);
-
+  
   /* ── 토스트 메시지 ─────────────────────────── */
   const showToast = (msg) => {
     setToastMsg(msg);
     clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToastMsg(null), 2500);
   };
-
+  
   /* ── 레이드 정보 수정 저장 ──────────────────── */
   const handleEditSave = async () => {
-  setEditSaving(true);
-  try {
-    const newMeta = RAID_META[editForm.raid_id];
-    const updated = await API.updateRaid(raidId, {
-      raid_id: editForm.raid_id,
-      raid_name: RAID_NAMES[editForm.raid_id] ?? raid.raid_name,
-      difficulty: editForm.difficulty,
-      max_slots: editForm.max_slots,
-    });
+    setEditSaving(true);
+    try {
+      const newMeta = RAID_META[editForm.raid_id];
+      const updated = await API.updateRaid(raidId, {
+        raid_id: editForm.raid_id,
+        raid_name: RAID_NAMES[editForm.raid_id] ?? raid.raid_name,
+        difficulty: editForm.difficulty,
+        max_slots: editForm.max_slots,
+      });
     setRaid(updated);
     setEditModal(false);
   } catch (e) {
@@ -376,72 +380,73 @@ export default function RaidDetailPage() {
   }
 };
 
-  /* ── 드래그 앤 드롭 핸들러 ─────────────────── */
-  const onCharDragStart = (e, charId) => {
-    setDragCharId(charId);
-    setDragSlotId(null);
-    e.dataTransfer.effectAllowed = "move";
-  };
+/* ── 드래그 앤 드롭 핸들러 ─────────────────── */
+const onCharDragStart = (e, charId) => {
+  setDragCharId(charId);
+  setDragSlotId(null);
+  e.dataTransfer.effectAllowed = "move";
+};
 
-  const onSlotDragStart = (e, slotId, charId) => {
-    setDragSlotId(slotId);
-    setDragCharId(charId);
-    e.dataTransfer.effectAllowed = "move";
-  };
+const onSlotDragStart = (e, slotId, charId) => {
+  setDragSlotId(slotId);
+  setDragCharId(charId);
+  e.dataTransfer.effectAllowed = "move";
+};
 
-  // ── 슬롯 드롭: 빈 슬롯이면 이동, 채워진 슬롯이면 swap ──
-  const onSlotDrop = (e, targetSlotOrder) => {
-    e.preventDefault();
-    if (!dragCharId) return;
-
-    const existingInTarget = pendingSlots.find((s) => s.slot_order === targetSlotOrder);
-    if (dragSlotId && existingInTarget?.id === dragSlotId) return;
-
-    const char = allCharacters.find((c) => c.id === dragCharId);
-    const now = Date.now();
-
-    setPendingSlots((prev) => {
-      let next = [...prev];
-
-      // 슬롯 → 채워진 슬롯: swap
-      if (dragSlotId && existingInTarget) {
-        const sourceSlot = next.find((s) => s.id === dragSlotId);
-        const sourceOrder = sourceSlot?.slot_order ?? 0;
-        next = next.map((s) => {
-          if (s.id === dragSlotId)          return { ...s, slot_order: targetSlotOrder, id: `temp-${now}-a` };
-          if (s.id === existingInTarget.id) return { ...s, slot_order: sourceOrder,     id: `temp-${now}-b` };
-          return s;
-        });
-      } else {
-        // 슬롯 → 빈 슬롯 이동 또는 캐릭터 패널 → 슬롯
-        if (dragSlotId)       next = next.filter((s) => s.id !== dragSlotId);
-        if (existingInTarget) next = next.filter((s) => s.id !== existingInTarget.id);
-        next.push({
-          id: `temp-${now}`,
-          character_id: dragCharId,
-          slot_order: targetSlotOrder,
-          character_name: char?.name ?? null,
-          class_name: char?.class_name ?? null,
-          is_support: char?.is_support ?? null,
-          role: null,
+// ── 슬롯 드롭: 빈 슬롯이면 이동, 채워진 슬롯이면 swap ──
+const onSlotDrop = (e, targetSlotOrder) => {
+  e.preventDefault();
+  if (!dragCharId) return;
+  
+  const existingInTarget = pendingSlots.find((s) => s.slot_order === targetSlotOrder);
+  if (dragSlotId && existingInTarget?.id === dragSlotId) return;
+  
+  const char = allCharacters.find((c) => c.id === dragCharId);
+  const now = Date.now();
+  
+  setPendingSlots((prev) => {
+    let next = [...prev];
+    
+    // 슬롯 → 채워진 슬롯: swap
+    if (dragSlotId && existingInTarget) {
+      const sourceSlot = next.find((s) => s.id === dragSlotId);
+      const sourceOrder = sourceSlot?.slot_order ?? 0;
+      next = next.map((s) => {
+        if (s.id === dragSlotId)          return { ...s, slot_order: targetSlotOrder, id: `temp-${now}-a` };
+        if (s.id === existingInTarget.id) return { ...s, slot_order: sourceOrder,     id: `temp-${now}-b` };
+        return s;
+      });
+    } else {
+      // 슬롯 → 빈 슬롯 이동 또는 캐릭터 패널 → 슬롯
+      if (dragSlotId)       next = next.filter((s) => s.id !== dragSlotId);
+      if (existingInTarget) next = next.filter((s) => s.id !== existingInTarget.id);
+      next.push({
+        id: `temp-${now}`,
+        character_id: dragCharId,
+        slot_order: targetSlotOrder,
+        character_name: char?.name ?? null,
+        class_name: char?.class_name ?? null,
+        is_support: char?.is_support ?? null,
+        role: null,
         });
       }
-
+      
       return next;
     });
-
+    
     setDragCharId(null);
     setDragSlotId(null);
   };
-
+  
   // ── 슬롯 클릭 제거: API 없이 pendingSlots만 즉시 업데이트 ──
   const onRemoveFromSlot = (slotId) => {
     setPendingSlots((prev) => prev.filter((s) => s.id !== slotId));
   };
-
+  
   /* ── 파티 저장 ──────────────────────────────── */
   const handleSaveSlots = async () => {
     setIsSaving(true);
+    isSavingRef.current = true;
     try {
       // 제거할 슬롯: savedSlots에 있지만 pendingSlots에 없는 것
       const toRemove = savedSlots.filter((s) =>
@@ -450,33 +455,33 @@ export default function RaidDetailPage() {
       // 추가할 슬롯: pendingSlots에 있지만 savedSlots에 없는 것
       const toAdd = pendingSlots.filter((p) =>
         !savedSlots.some((s) => s.character_id === p.character_id && s.slot_order === p.slot_order)
-      );
-
-      // 제거 병렬 처리 (temp ID는 서버에 없으므로 실제 ID만)
-      await Promise.all(
-        toRemove
-          .filter((s) => !String(s.id).startsWith("temp-"))
-          .map((s) => API.removeSlot(s.id))
-      );
-
-      // 추가 병렬 처리
-      const addedSlots = await Promise.all(
-        toAdd.map((p) =>
-          API.addSlot(raidId, {
-            character_id: p.character_id,
-            slot_order: p.slot_order,
-            role: p.role ?? null,
+    );
+    
+    // 제거 병렬 처리 (temp ID는 서버에 없으므로 실제 ID만)
+    await Promise.all(
+      toRemove
+      .filter((s) => !String(s.id).startsWith("temp-"))
+      .map((s) => API.removeSlot(s.id))
+    );
+    
+    // 추가 병렬 처리
+    const addedSlots = await Promise.all(
+      toAdd.map((p) =>
+        API.addSlot(raidId, {
+          character_id: p.character_id,
+          slot_order: p.slot_order,
+          role: p.role ?? null,
           })
         )
       );
-
+      
       // savedSlots 갱신: 제거된 것 빼고 추가된 것 넣기
       const newSaved = [
         ...savedSlots.filter((s) => !toRemove.some((r) => r.id === s.id)),
         ...addedSlots,
       ];
       setSavedSlots(newSaved);
-
+      
       // pendingSlots의 temp ID를 실제 서버 ID로 교체
       setPendingSlots((prev) => {
         const result = [...prev];
@@ -488,7 +493,7 @@ export default function RaidDetailPage() {
         });
         return result;
       });
-
+      
       navigate("/");
       
     } catch (err) {
@@ -497,58 +502,67 @@ export default function RaidDetailPage() {
       setPendingSlots(savedSlots);
     } finally {
       setIsSaving(false);
+      isSavingRef.current = false;
     }
   };
-
+  
   // ── 되돌리기: pendingSlots를 savedSlots로 리셋 ──
   const handleRevertSlots = () => {
     setPendingSlots(savedSlots);
   };
+  
+  const [, startTransition] = useTransition();
 
   /* ── 유저 추가 / 제거 ───────────────────────── */
   const handleAddMember = async () => {
     const name = searchInput.trim();
     if (!name) return;
-
+    
     setSearchState("loading");
     setSearchError("");
-
+    
     try {
       // 1. LoA API로 대표 캐릭터명 해석 (어떤 캐릭터명을 입력해도 대표명으로 통일)
       const resolved = await API.resolveUser(name);
       const rep = resolved.representative;
-
+      
       // 2. 본인 확인 (규칙3)
       if (rep === myRepresentative) {
         setSearchError("본인은 추가할 수 없습니다.");
         setSearchState("error");
         return;
       }
-
+      
       // 3. 중복 확인
       if (members.some(m => m.representative === rep)) {
         setSearchError("이미 추가된 원정대입니다.");
         setSearchState("error");
         return;
       }
-
+      
       // 4. DB에서 캐릭터 정보만 가져오기 (DB only, 빠름)
       const results = await API.getCharactersByReps([rep]);
       const newMember = results[0];
-
+      
       if (!newMember) {
         setSearchError("캐릭터 정보를 찾을 수 없습니다.");
         setSearchState("error");
         return;
       }
-
+      
       // 5. 로컬 상태 업데이트 + localStorage 저장
       saveRecentMember(rep);
-      setMembers(prev => [...prev, newMember]);
       setRecentMemberReps(prev => new Set([...prev, rep]));
-      setSelectedRep(rep); // 추가한 원정대 자동 선택
+
+      // handleAddMember 내부
       setSearchInput("");
       setSearchState("done");
+      // 멤버 목록 렌더링은 낮은 우선순위로 처리
+      startTransition(() => {
+        setMembers(prev => [...prev, newMember]);
+        setSelectedRep(rep);
+      });
+      setTimeout(() => setSearchState(null), 1500);
       setTimeout(() => setSearchState(null), 1500);
     } catch (e) {
       setSearchError(e.message || "원정대를 찾을 수 없습니다.");

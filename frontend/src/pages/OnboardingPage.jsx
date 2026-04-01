@@ -42,19 +42,10 @@ export default function OnboardingPage(){
       return
     }
 
-    try{
-      // 로스트아크 API 호출 이후 캐릭터 동기화
-      setLoadingMsg('캐릭터 목록 불러오는 중...')  // ← 가장 오래 걸리는 구간
-      await syncCharacters(fingerprint, representative.trim())
-    } catch (err){
-      setError('캐릭터를 찾을 수 없어요. 캐릭터명을 다시 확인해주세요.')
-      console.warn('캐릭터 동기화 실패 (메인에서 재시도 가능):', err.message)
-    } 
-    finally {
-      setLoading(false)
-      setLoadingMsg('')
-      navigate('/')
-    }
+    // await 제거 → 백그라운드에서 동기화, 즉시 메인으로 이동
+    syncCharacters(fingerprint, representative.trim()).catch(() => {})
+    setLoading(false)
+    navigate('/')
   }
 
   return (

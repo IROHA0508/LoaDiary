@@ -111,9 +111,24 @@ async def get_characters_by_representatives(reps: str = Query(...)):
 # 반드시 /{fingerprint} 보다 먼저 선언해야 라우트 충돌이 없음
 @router.get("/resolve")
 async def resolve_user_by_character_name(character_name: str = Query(...)):
-  from app.lostark import resolve_or_create_user_by_character_name
-  user = await resolve_or_create_user_by_character_name(character_name)
-  return user
+    # 1단계: DB에서 먼저 검색 (빠름)
+    existing = (
+        supabase.table("characters")
+        .select("user_id, name")
+        .eq("name", character_name)
+        .limit(1)
+        .execute()
+    )
+    if existing.data:
+        user_id = existing.data[0]["user_id"]
+        user = supabase.table("users").select("*").eq("id", user_id).execute()
+        if user.data:
+            return user.data[0]
+    
+    # 2단계: DB에 없을 때만 외부 API 호출
+    from app.lostark import resolve_or_create_user_by_character_name
+    user = await resolve_or_create_user_by_character_name(character_name)
+    return user
 
 
 # 대표 캐릭터명 exact match 조회 — /{fingerprint} 보다 먼저 선언

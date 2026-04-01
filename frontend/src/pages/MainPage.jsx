@@ -206,16 +206,15 @@ export default function MainPage() {
   const groupDragIdx  = useRef(null)
   const groupDragOver = useRef(null)
 
-  // 현재 로그인 유저의 DB user_id (created_by 비교용)
-  const [myUserId, setMyUserId] = useState(null)
-  const [myRepresentative, setMyRepresentative] = useState(null)
-  useEffect(() => {
-    if (!fingerprint) return
-    getUser(fingerprint).then(u => {
-      setMyUserId(u?.id ?? null)
-      setMyRepresentative(u?.representative ?? null)  // 같은 응답에서 함께 저장
-    }).catch(() => {})
-  }, [fingerprint])
+  // useEffect + 직접 호출 대신 useQuery로 교체 → 캐시 공유
+  const { data: myUserData } = useQuery({
+    queryKey: ['user', fingerprint],
+    queryFn: () => getUser(fingerprint),
+    enabled: !!fingerprint,
+    staleTime: 1000 * 60,
+  })
+  const myUserId = myUserData?.id ?? null
+  const myRepresentative = myUserData?.representative ?? null
 
   const handleCharSearch = (e) => {
     e.preventDefault()
@@ -250,20 +249,18 @@ export default function MainPage() {
     } catch {}
   }, [fingerprint])
 
-  // ② API에서 최신 순서 백그라운드 동기화 — 다른 기기 변경사항 반영
-  useEffect(() => {
-    if (!fingerprint) return
-    getRaidOrder(fingerprint)
-      .then(order => {
-        if (Array.isArray(order) && order.length > 0) {
-          setRaidOrder(order)
-          localStorage.setItem(`raidOrder_${fingerprint}`, JSON.stringify(order))
-        }
-      })
-      .catch(() => {})
-  }, [fingerprint])
+  const { data: raidOrderData } = useQuery({
+    queryKey: ['raidOrder', fingerprint],
+    queryFn: () => getRaidOrder(fingerprint),
+    enabled: !!fingerprint,
+    staleTime: 1000 * 60,  // 1분간 캐시 유지
+  })
 
-  
+  useEffect(() => {
+    if (!raidOrderData || !Array.isArray(raidOrderData) || raidOrderData.length === 0) return
+    setRaidOrder(raidOrderData)
+    localStorage.setItem(`raidOrder_${fingerprint}`, JSON.stringify(raidOrderData))
+  }, [raidOrderData, fingerprint])
   
   // ── 완료된 레이드 ID Set ── DB의 is_completed 필드 기준
   // (별도 로컬 state 없이 rawRaids에서 직접 파생)
