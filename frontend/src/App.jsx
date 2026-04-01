@@ -7,7 +7,7 @@ import { useEffect } from 'react'
 // Route : URL 경로와 컴포넌트를 연결
 // Navigate : 특정 경로로 강제 이동시키는 컴포넌트
 // useNavigate : 코드에서 페이지 이동할 때 쓰는 훅
-import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 
 // QueryClient : TanStack Query의 캐시와 설정을 관리하는 객체
 // QueryClientProvider : 앱 전체에서 useQuery를 쓸 수 있게 감싸주는 컴포넌트. Python의 전역 설정 객체와 비슷한 개념
@@ -17,9 +17,6 @@ import { getUser } from './api/users'
 
 // export default로 내보낸 컴포넌트는 중괄호 없이 import 가능
 import Layout from './components/Layout'
-
-// useLocation 추가 import
-import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 
 // AppRoutes 컴포넌트 내부
 const location = useLocation()
