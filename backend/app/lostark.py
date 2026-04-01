@@ -128,10 +128,17 @@ async def resolve_or_create_user_by_character_name(character_name: str) -> dict:
   sibling_names = [c.get("CharacterName") for c in raw if c.get("CharacterName")]
 
   # ③ siblings 중 DB에 대표 캐릭터로 등록된 유저 탐색
-  for name in sibling_names:
-    existing = supabase.table("users").select("*").eq("representative", name).execute()
-    if existing.data:
-      return existing.data[0]
+  # ③ siblings 전체를 한 번의 배치 쿼리로 조회 (N+1 → 1)
+  if sibling_names:
+      batch = (
+          supabase.table("users")
+          .select("*")
+          .in_("representative", sibling_names)
+          .limit(1)
+          .execute()
+      )
+      if batch.data:
+          return batch.data[0]
 
   # ④ 없으면 임시 유저 생성
   # 대표 캐릭터 = 원정대 내 아이템 레벨이 가장 높은 캐릭터

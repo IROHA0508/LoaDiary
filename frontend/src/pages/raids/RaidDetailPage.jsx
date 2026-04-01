@@ -563,7 +563,6 @@ const onSlotDrop = (e, targetSlotOrder) => {
         setSelectedRep(rep);
       });
       setTimeout(() => setSearchState(null), 1500);
-      setTimeout(() => setSearchState(null), 1500);
     } catch (e) {
       setSearchError(e.message || "원정대를 찾을 수 없습니다.");
       setSearchState("error");
