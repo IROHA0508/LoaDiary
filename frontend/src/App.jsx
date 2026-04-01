@@ -18,6 +18,12 @@ import { getUser } from './api/users'
 // export default로 내보낸 컴포넌트는 중괄호 없이 import 가능
 import Layout from './components/Layout'
 
+// useLocation 추가 import
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
+
+// AppRoutes 컴포넌트 내부
+const location = useLocation()
+
 // 모든 페이지를 lazy import로 전환
 const OnboardingPage     = lazy(() => import('./pages/OnboardingPage'))
 const MainPage           = lazy(() => import('./pages/MainPage'))
@@ -46,27 +52,22 @@ function AppRoutes(){
   const navigate = useNavigate()
 
 
-  // fingerprint, loading 값이 바뀔 때 마다 실행
   useEffect(() => {
-    // fingerprint가 없으면 아무것도 안함
     if (loading || !fingerprint) return
+    // 이미 온보딩 페이지에 있으면 체크 불필요
+    if (location.pathname === '/onboarding') return
 
     const checkUser = async () => {
-      // 유저가 있으면 현재 페이지 유지
-      try{
+      try {
         await getUser(fingerprint)
-      } 
-      // 유저가 없으면 온보딩 페이지로 이동 (404 에러 발생)      
-      catch(e){
-        // 404일 때만 온보딩으로 이동 (네트워크 오류 등에는 반응 안 함)
+      } catch(e) {
         if (e?.response?.status === 404) {
           navigate('/onboarding')
         }
       }
     }
-
     checkUser()
-  }, [fingerprint, loading, navigate])
+  }, [fingerprint, loading, navigate, location.pathname])
 
   // fingerprint 준비중일 때 로딩 화면 표시
   if (loading){

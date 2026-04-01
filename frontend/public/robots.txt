@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://loa-diary.vercel.app/sitemap.xml
