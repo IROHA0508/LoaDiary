@@ -358,78 +358,34 @@ export default function MainPage() {
   useEffect(() => {
     if (!fingerprint) return
 
-    let raidListTimer = null
-    const raidSlotTimers = new Map()
+    let allRaidsTimer = null
 
-    const debouncedRefetchRaidLists = () => {
-      if (raidListTimer) clearTimeout(raidListTimer)
-      raidListTimer = setTimeout(() => {
-        queryClient.refetchQueries({ queryKey: ['joinedRaids', fingerprint] })
-        queryClient.refetchQueries({ queryKey: ['myRaids', fingerprint] })
+    // allRaidsWithSlots 디바운스 refetch (120ms)
+    // — raid_slots / raids 변경 시 단일 경로로 UI 갱신
+    const debouncedRefetchAll = () => {
+      if (allRaidsTimer) clearTimeout(allRaidsTimer)
+      allRaidsTimer = setTimeout(() => {
+        queryClient.refetchQueries({ queryKey: ['allRaidsWithSlots', fingerprint] })
       }, 120)
     }
 
-    const debouncedFetchRaidSlots = (raidId) => {
-      if (!raidId) return
-
-      const prevTimer = raidSlotTimers.get(raidId)
-      if (prevTimer) clearTimeout(prevTimer)
-
-      const nextTimer = setTimeout(() => {
-        getSlots(raidId).then(slots => {
-          setSlotsMap(prev => ({ ...prev, [raidId]: slots }))
-        })
-        raidSlotTimers.delete(raidId)
-      }, 120)
-
-      raidSlotTimers.set(raidId, nextTimer)
-    }
-
-  
-    // raid_members 변경 구독 → 내가 레이드에 초대됐을 때 joinedRaids 갱신
-    const membersChannel = supabase
-      .channel('mainpage_raid_members')
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'raid_members',
-      }, 
-      // () => {
-      //   queryClient.invalidateQueries({ queryKey: ['joinedRaids', fingerprint] })
-      //   queryClient.invalidateQueries({ queryKey: ['myRaids', fingerprint] })
-
-      //   queryClient.refetchQueries({ queryKey: ['joinedRaids', fingerprint] })
-      //   queryClient.refetchQueries({ queryKey: ['myRaids', fingerprint] })
-      // }
-      debouncedRefetchRaidLists
-      )
-      .subscribe()
-
-    // raid_slots 변경 구독 → 다른 유저가 슬롯 배치/제거하면 슬롯 정보 갱신
+    // raid_slots 변경 구독
+    // 슬롯에 캐릭터가 저장/제거될 때 → allRaidsWithSlots 재조회
+    // "저장이 완료된 시점"에만 B·C의 메인페이지에 레이드가 반영됨
     const slotsChannel = supabase
       .channel('mainpage_raid_slots')
       .on('postgres_changes', {
         event: '*',
         schema: 'public',
         table: 'raid_slots',
-      }, 
-      // (payload) => {
-      //   // 변경된 슬롯의 raid_id만 재조회
-      //   const changedRaidId = payload.new?.raid_id ?? payload.old?.raid_id
-      //   if (!changedRaidId) return
-      //   getSlots(changedRaidId).then(slots => {
-      //     setSlotsMap(prev => ({ ...prev, [changedRaidId]: slots }))
-      //   })
-      // }
-      (payload) => {
-        const changedRaidId = payload.new?.raid_id ?? payload.old?.raid_id
-        debouncedFetchRaidSlots(changedRaidId)
-        debouncedRefetchRaidLists()  // 추가: joinedRaids도 갱신
-      }
+      },
+      debouncedRefetchAll
       )
       .subscribe()
 
-    // raids 변경 구독 → 레이드 생성/삭제/is_completed 변경 시 목록 갱신
+    // raids 변경 구독
+    // 레이드 생성·삭제·is_completed 변경 시
+    // 생성자(A)의 화면에만 즉시 반영, B·C는 슬롯 저장 전까지 표시 안 됨
     const raidsChannel = supabase
       .channel('mainpage_raids')
       .on('postgres_changes', {
@@ -437,21 +393,16 @@ export default function MainPage() {
         schema: 'public',
         table: 'raids',
       },
-      debouncedRefetchRaidLists
+      debouncedRefetchAll
       )
       .subscribe()
 
-    // return () => {
-    //   supabase.removeChannel(membersChannel)
-    //   supabase.removeChannel(slotsChannel)
-    //   supabase.removeChannel(raidsChannel)
-    // }
-    return () => {
-      if (raidListTimer) clearTimeout(raidListTimer)
-      raidSlotTimers.forEach((timer) => clearTimeout(timer))
-      raidSlotTimers.clear()
+    // raid_members 구독 제거
+    // — option B 적용 후 raid_members는 레이드 가시성 판단에 사용되지 않음
+    // — allRaidsWithSlots는 created_by + raid_slots 기준으로만 필터링
 
-      supabase.removeChannel(membersChannel)
+    return () => {
+      if (allRaidsTimer) clearTimeout(allRaidsTimer)
       supabase.removeChannel(slotsChannel)
       supabase.removeChannel(raidsChannel)
     }

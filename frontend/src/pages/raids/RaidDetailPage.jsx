@@ -968,8 +968,13 @@ export default function RaidDetailPage() {
                                 draggable={draggable}
                                 onDragStart={draggable ? () => setDragCharId(char.id) : undefined}
                                 onDragEnd={draggable ? () => setDragCharId(null) : undefined}
-                                onClick={!disabled ? () => handleCharClick(char.id) : undefined}
-                                onContextMenu={(e) => { e.preventDefault(); if (placed) handleCharRightClick(char.id); }}
+                                onClick={!disabled ? () => onCharClick(char.id) : undefined}
+                                onContextMenu={(e) => {
+                                  e.preventDefault();
+                                  // 배치된 캐릭터 우클릭 → 슬롯에서 제거
+                                  const slot = pendingSlots.find((s) => s.character_id === char.id);
+                                  if (slot) onRemoveFromSlot(slot.id);
+                                }}
                               >
                                 <div style={styles.charName}>{char.name}</div>
                                 <div style={styles.charClass}>{char.class_name ?? "-"}</div>
@@ -1500,8 +1505,8 @@ const styles = {
   },
   charDetailGrid: {
     display: "grid",
-    // 고정 3열 — 이름이 긴 캐릭터도 잘리지 않도록 충분한 너비 확보
-    gridTemplateColumns: "repeat(3, 1fr)",
+    // 고정 2열 — 이름이 긴 캐릭터도 잘리지 않도록 충분한 너비 확보
+    gridTemplateColumns: "repeat(2, 1fr)",
     gap: 8,
     overflowY: "auto",
   },
