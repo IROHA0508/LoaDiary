@@ -1295,7 +1295,11 @@ export default function MainPage() {
           /* ── API 성공: tempId → 실제 그룹으로 교체 (ADD 아님 → 중복 방지) ── */
           onCreated={(newGroup, tempId) => {
             queryClient.setQueryData(['groups', fingerprint], (prev = []) =>
-              (prev ?? []).map(g => g.id === tempId ? newGroup : g)
+              (prev ?? []).map(g =>
+                g.id === tempId
+                  ? { ...g, id: newGroup.id, name: newGroup.name, _pending: false }
+                  : g
+              )
             )
           }}
 
