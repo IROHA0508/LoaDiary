@@ -18,6 +18,7 @@ import { useCallback } from 'react'
    ───────────────────────────────────────────── */
 const RAID_SCROLL_THRESHOLD = 6   // 이 개수 이상이면 스크롤 활성화
 const RAID_SECTION_MAX_HEIGHT = 480  // 스크롤 활성화 시 섹션 최대 높이(px)
+const RAID_EMPTY_HEIGHT = 180       // 레이드가 없을 때 빈 상태 영역 높이(px) ← 추가
 
 /* ─────────────────────────────────────────────
    난이도 배지 스타일
@@ -188,6 +189,7 @@ export default function MainPage() {
   const queryClient = useQueryClient()
 
   const [raidToDelete, setRaidToDelete] = useState(null)
+  const [deleteError, setDeleteError] = useState(null)
   const [syncing, setSyncing] = useState(false)        // 전체 동기화 중 여부
   const [syncResult, setSyncResult] = useState(null)   // { synced, failed } | null
   // 캐릭터 검색 (헤더 검색창 연결용)
@@ -265,7 +267,6 @@ export default function MainPage() {
   
   // ── 완료된 레이드 ID Set ── DB의 is_completed 필드 기준
   // (별도 로컬 state 없이 rawRaids에서 직접 파생)
-  
   /* ── 데이터 조회 ──────────────────────────── */
   const { data: characters = [], isLoading: charLoading } = useQuery({
     queryKey: ['characters', fingerprint],
@@ -325,24 +326,84 @@ export default function MainPage() {
     return map
   }, [allRaidsWithSlots])
 
-  
+  /* ── 낙관적 삭제 공통 헬퍼 ───────────────────
+    1. 진행 중인 refetch를 취소해 낙관적 업데이트가 덮어써지지 않도록 방지
+    2. 현재 캐시를 snapshot으로 저장 (실패 시 롤백 재료)
+    3. 캐시 · raidOrder · localStorage를 즉시 업데이트 → UI 즉각 반응
+    4. 모달을 즉시 닫아 다음 삭제를 바로 시작할 수 있도록 허용
+  ──────────────────────────────────────────── */
+  const optimisticRemoveRaid = async (raidId) => {
+    // ① 진행 중인 refetch 취소 — 낙관적 업데이트가 덮어써지는 race condition 방지
+    await queryClient.cancelQueries({ queryKey: ['allRaidsWithSlots', fingerprint] })
+
+    // ② 롤백용 스냅샷 저장
+    const snapshot = queryClient.getQueryData(['allRaidsWithSlots', fingerprint])
+
+    // ③ QueryCache에서 즉시 제거
+    queryClient.setQueryData(
+      ['allRaidsWithSlots', fingerprint],
+      (prev = []) => prev.filter(r => r.id !== raidId)
+    )
+
+    // ④ raidOrder 즉시 제거 (정렬 배열 동기화)
+    setRaidOrder(prev => prev.filter(id => id !== raidId))
+
+    // ⑤ localStorage도 즉시 업데이트 (새로고침 후에도 반영)
+    try {
+      const saved = JSON.parse(localStorage.getItem(`raidOrder_${fingerprint}`) || '[]')
+      localStorage.setItem(
+        `raidOrder_${fingerprint}`,
+        JSON.stringify(saved.filter(id => id !== raidId))
+      )
+    } catch {}
+
+    // ⑥ 모달 즉시 닫기 → 유저가 다음 삭제를 바로 수행 가능
+    setRaidToDelete(null)
+
+    return { snapshot }
+  }
+
   /* ── 레이드 삭제 ──────────────────────────── */
   const deleteMutation = useMutation({
     mutationFn: (raidId) => deleteRaid(raidId),
-    onSuccess: () => {
+
+    // API 호출 전: 낙관적으로 즉시 UI 반영
+    onMutate: (raidId) => optimisticRemoveRaid(raidId),
+
+    // 실패 시: 스냅샷으로 정확히 롤백 + 에러 토스트
+    onError: (_err, _raidId, context) => {
+      if (context?.snapshot) {
+        queryClient.setQueryData(['allRaidsWithSlots', fingerprint], context.snapshot)
+      }
+      setDeleteError('레이드 삭제에 실패했어요. 다시 시도해주세요.')
+      setTimeout(() => setDeleteError(null), 3500)
+    },
+
+    // 성공/실패 모두: 서버 상태와 최종 동기화 (백그라운드)
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['allRaidsWithSlots', fingerprint] })
-      queryClient.refetchQueries({ queryKey: ['allRaidsWithSlots', fingerprint] })
-      setRaidToDelete(null)
     },
   })
 
   /* ── 레이드 나가기 (참여 중인 레이드에서 본인 제거) ── */
   const leaveMutation = useMutation({
     mutationFn: (raidId) => client.delete(`/api/raids/${raidId}/members/${myUserId}`),
-    onSuccess: () => {
+
+    // API 호출 전: 낙관적으로 즉시 UI 반영
+    onMutate: (raidId) => optimisticRemoveRaid(raidId),
+
+    // 실패 시: 롤백 + 에러 토스트
+    onError: (_err, _raidId, context) => {
+      if (context?.snapshot) {
+        queryClient.setQueryData(['allRaidsWithSlots', fingerprint], context.snapshot)
+      }
+      setDeleteError('레이드 나가기에 실패했어요. 다시 시도해주세요.')
+      setTimeout(() => setDeleteError(null), 3500)
+    },
+
+    // 성공/실패 모두: 서버 상태와 최종 동기화 (백그라운드)
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['allRaidsWithSlots', fingerprint] })
-      queryClient.refetchQueries({ queryKey: ['allRaidsWithSlots', fingerprint] })
-      setRaidToDelete(null)
     },
   })
 
@@ -447,22 +508,44 @@ export default function MainPage() {
           schema: 'public',
           table: 'group_members',
         },
-        // async () => {
-        //   await fetchGroups()
-        // }
         debounceFetchGroups
       )
       .subscribe()
 
-    // return () => {
-    //   supabase.removeChannel(groupsChannel)
-    //   supabase.removeChannel(groupMembersChannel)
-    // }
+    // ✅ raids 테이블 UPDATE 실시간 구독 (is_completed 변경 즉시 반영)
+    // - API 재호출 없이 캐시만 직접 패치 → 로딩 없음, 모든 사용자에게 즉시 반영
+    const raidsCompletedChannel = supabase
+      .channel(`mainpage_raids_completed_${fingerprint}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'raids' },
+        (payload) => {
+          const updated = payload.new
+          if (!updated?.id) return
+
+          // React Query 캐시 직접 업데이트 (내 레이드 목록에 있는 경우만)
+          queryClient.setQueryData(
+            ['allRaidsWithSlots', fingerprint],
+            (prev = []) => {
+              const exists = prev.some(r => r.id === updated.id)
+              if (!exists) return prev  // 내 레이드가 아니면 무시 (불필요한 리렌더 방지)
+              return prev.map(r =>
+                r.id === updated.id
+                  ? { ...r, is_completed: updated.is_completed }
+                  : r
+              )
+            }
+          )
+        }
+      )
+      .subscribe()
+
     return () => {
       if (groupFetchTimer) clearTimeout(groupFetchTimer)
       supabase.removeChannel(groupsChannel)
       supabase.removeChannel(groupMembersChannel)
-    }   
+      supabase.removeChannel(raidsCompletedChannel)
+    }
   }, [fingerprint, refetchGroups])
 
   /* ── 드래그 앤 드롭 핸들러 ────────────────── */
@@ -568,25 +651,24 @@ export default function MainPage() {
 
   /* ── 완료 토글: DB 업데이트 + 낙관적 업데이트 ── */
   const toggleCompleted = async (e, raidId) => {
-    e.stopPropagation()
-    const targetRaid = rawRaids.find(r => r.id === raidId)
-    if (!targetRaid) return
-    const newValue = !targetRaid.is_completed
+      e.stopPropagation()
+      const targetRaid = rawRaids.find(r => r.id === raidId)
+      if (!targetRaid) return
+      const newValue = !targetRaid.is_completed
 
-    // 낙관적 업데이트: 두 쿼리 캐시 모두 즉시 반영
-    const updater = (prev = []) => prev.map(r => r.id === raidId ? { ...r, is_completed: newValue } : r)
-    queryClient.setQueryData(['myRaids',     fingerprint], updater)
-    queryClient.setQueryData(['joinedRaids', fingerprint], updater)
+      // 낙관적 업데이트: allRaidsWithSlots 캐시 즉시 반영 (현재 사용 중인 올바른 키)
+      const updater = (prev = []) => prev.map(r => r.id === raidId ? { ...r, is_completed: newValue } : r)
+      queryClient.setQueryData(['allRaidsWithSlots', fingerprint], updater)
 
-    try {
-      await client.patch(`/api/raids/${raidId}`, { is_completed: newValue })
-    } catch {
-      // 실패 시 롤백
-      const rollback = (prev = []) => prev.map(r => r.id === raidId ? { ...r, is_completed: !newValue } : r)
-      queryClient.setQueryData(['myRaids',     fingerprint], rollback)
-      queryClient.setQueryData(['joinedRaids', fingerprint], rollback)
+      try {
+        // ✅ 올바른 엔드포인트 + 명시적 값 전달 (DB SELECT 왕복 없음)
+        await client.patch(`/api/raids/${raidId}/complete`, { is_completed: newValue })
+      } catch {
+        // 실패 시 롤백
+        const rollback = (prev = []) => prev.map(r => r.id === raidId ? { ...r, is_completed: !newValue } : r)
+        queryClient.setQueryData(['allRaidsWithSlots', fingerprint], rollback)
+      }
     }
-  }
 
   return (
     <div>
@@ -740,7 +822,7 @@ export default function MainPage() {
                 <span className="text-sm text-gray-500">불러오는 중...</span>
               </div>
             ) : raids.length === 0 ? (
-              <div className="flex flex-col items-center justify-center text-center" style={{ height: `${RAID_SECTION_MAX_HEIGHT}px` }}>
+              <div className="flex flex-col items-center justify-center text-center" style={{ height: `${RAID_EMPTY_HEIGHT}px` }}>
                 <p className="text-sm text-gray-500">참여 중인 레이드가 없어요.</p>
                 <button
                   onClick={() => flushSync(() => navigate('/raids/new'))}
@@ -1118,6 +1200,16 @@ export default function MainPage() {
 
       </div>
 
+      {/* ── 삭제 실패 에러 토스트 ─────────────── */}
+      {deleteError && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] flex items-center gap-2 px-4 py-2.5 bg-red-950 border border-red-700/60 rounded-xl shadow-xl text-sm text-red-300 whitespace-nowrap pointer-events-none">
+          <svg width="15" height="15" viewBox="0 0 20 20" fill="currentColor" className="flex-shrink-0 text-red-400">
+            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd"/>
+          </svg>
+          {deleteError}
+        </div>
+      )}
+
       {/* ── 삭제 확인 모달 ────────────────────── */}
       {raidToDelete && (
         <div
@@ -1146,6 +1238,7 @@ export default function MainPage() {
               >
                 취소
               </button>
+              {/* 낙관적 업데이트 적용 후 isPending 대기 없이 즉시 실행 */}
               <button
                 onClick={() => {
                   if (isMyRaid(raidToDelete.id)) {
@@ -1154,13 +1247,9 @@ export default function MainPage() {
                     leaveMutation.mutate(raidToDelete.id)
                   }
                 }}
-                disabled={deleteMutation.isPending || leaveMutation.isPending}
-                className="flex-1 px-4 py-2 text-sm font-semibold text-white bg-red-600 hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
+                className="flex-1 px-4 py-2 text-sm font-semibold text-white bg-red-600 hover:bg-red-500 rounded-lg transition-colors"
               >
-                {(deleteMutation.isPending || leaveMutation.isPending)
-                  ? '처리 중...'
-                  : (isMyRaid(raidToDelete.id) ? '삭제' : '나가기')
-                }
+                {isMyRaid(raidToDelete.id) ? '삭제' : '나가기'}
               </button>
             </div>
           </div>
