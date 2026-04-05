@@ -50,11 +50,23 @@ async def create_raid(payload: RaidCreate):
 # 생성한 레이드 목록 조회
 @router.get("/my/{fingerprint}", response_model=List[RaidResponse])
 async def get_my_raids(fingerprint: str):
-    # users 조회를 raids 쿼리와 JOIN으로 합치기
+    # 1. fingerprint → user_id 조회
+    user_result = (
+        supabase.table("users")
+        .select("id")
+        .eq("fingerprint", fingerprint)
+        .execute()
+    )
+    if not user_result.data:
+        raise HTTPException(status_code=404, detail="유저를 찾을 수 없습니다.")
+
+    user_id = user_result.data[0]["id"]
+
+    # 2. user_id 기준으로 raids 조회 (LEFT JOIN 오작동 방지)
     result = (
         supabase.table("raids")
-        .select("*, users!created_by(fingerprint)")
-        .eq("users.fingerprint", fingerprint)
+        .select("*")
+        .eq("created_by", user_id)
         .order("created_at", desc=True)
         .execute()
     )

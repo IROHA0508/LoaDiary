@@ -68,7 +68,7 @@ class RaidResponse(BaseModel):
   raid_name: str
   difficulty: str
   max_slots: int
-  created_by: str
+  created_by: Optional[str] = None
   created_at: datetime
 
   model_config = {"from_attributes": True}
