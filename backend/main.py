@@ -49,6 +49,6 @@ def root():
   return {"message" : "LoaDiary API 작동 중"}
 
 # 상태확인 엔드포인트 추가
-@app.get("/health")
+@app.api_route("/health", methods=["GET", "HEAD"])
 def health_check():
-  return {"status" : "healthy"}
+    return {"status": "healthy"}
