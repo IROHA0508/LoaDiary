@@ -113,16 +113,6 @@ async def sync_characters(fingerprint: str, representative: str):
         rows.append(row)
     return rows
 
-
-# async def _sync_task(user_id: str, raw: list):
-#     """백그라운드에서 실행되는 실제 동기화 작업"""
-#     now = datetime.now(timezone.utc).isoformat()
-#     try:
-#         parsed = await parse_characters(raw, user_id)
-#         _upsert_characters(user_id, parsed, now)
-#     except Exception as e:
-#         print(f"Background sync 실패: {e}")
-
 # 전체 동기화: 내 캐릭터 + 레이드 멤버 전원
 @router.post("/{fingerprint}/sync-all")
 async def sync_all(fingerprint: str):

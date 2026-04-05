@@ -25,7 +25,7 @@ const RaidNewPage        = lazy(() => import('./pages/raids/RaidNewPage'))
 const RaidDetailPage     = lazy(() => import('./pages/raids/RaidDetailPage'))
 const RankingPage        = lazy(() => import('./pages/features/RankingPage'))
 const MarketPage         = lazy(() => import('./pages/features/MarketPage'))
-const MerchantPage       = lazy(() => import('./pages/features/MerchantPage'))
+const CalcPage       = lazy(() => import('./pages/features/CalcPage'))
 const CharacterDetailPage = lazy(() => import('./pages/CharacterDetailPage'))
 
 // QueryClient 인스턴스 생성 + 최적화
@@ -102,7 +102,7 @@ function AppRoutes(){
           {/* 헤더에 있는 랭킹, 거래소, 떠돌이 상인 페이지 */}
           <Route path="ranking" element={<RankingPage />} />
           <Route path="market" element={<MarketPage />} />
-          <Route path="merchants" element={<MerchantPage />} />
+          <Route path="calc" element={<CalcPage />} />
 
           {/* 캐릭터 상세 페이지  */}
           <Route path="characters/:name" element={<CharacterDetailPage />} />

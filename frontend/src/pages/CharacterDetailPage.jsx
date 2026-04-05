@@ -215,6 +215,16 @@ const BRACE_TYPE  = '팔찌'
 const GRADE_COLORS_EQ  = { '고대': '#e8c86a', '유물': '#e07b39', '전설': '#e8b339', '영웅': '#b958d4', '희귀': '#3a96d4', '고급': '#4ac96e' }
 function eqGradeColor(g) { return GRADE_COLORS_EQ[g] || '#64748b' }
 
+// ── 계승 장비 판별 ─────────────────────────────────────
+// 계승 전: "운명의 결단~"(유물), "운명의 업화~"(고대)
+// 계승 후: "운명의 전율~"(고대) ← 이 prefix 만 체크하면 됨
+const INHERITED_PREFIX     = '운명의 전율'
+const INHERITED_BORDER_SRC = '/images/inherited-border.png'
+/** @param {string|undefined} name */
+function isInherited(name) {
+  return typeof name === 'string' && name.includes(INHERITED_PREFIX)
+}
+
 function EquipSlot({ item }) {
   if (!item) return (
     <div className="flex items-center gap-2 bg-gray-800/30 border border-gray-700/20 rounded-lg px-2.5 py-2 opacity-40">
@@ -222,16 +232,46 @@ function EquipSlot({ item }) {
       <span className="text-[10px] text-gray-600">비어있음</span>
     </div>
   )
-  const col = eqGradeColor(item.Grade)
+
+  const col       = eqGradeColor(item.Grade)
+  const inherited = isInherited(item.Name)
+
   return (
-    <div className="flex items-center gap-2.5 bg-gray-800/50 border rounded-lg px-2.5 py-2" style={{ borderColor: col + '44' }}>
-      {item.Icon
-        ? <img src={item.Icon} alt={item.Type} loading="lazy" decoding="async" className="w-9 h-9 rounded flex-shrink-0 object-cover" style={{ border: `1.5px solid ${col}66` }}/>
-        : <div className="w-9 h-9 rounded bg-gray-700 flex-shrink-0" />
-      }
+    <div
+      className="flex items-center gap-2.5 bg-gray-800/50 border rounded-lg px-2.5 py-2"
+      style={{ borderColor: col + '44' }}
+    >
+      {/* ── 아이콘 래퍼 — relative는 반드시 contain 없는 컨텍스트에 있어야 함 ── */}
+      <div className="relative w-9 h-9 flex-shrink-0">
+        {item.Icon
+          ? <img
+              src={item.Icon}
+              alt={item.Type}
+              loading="lazy"
+              decoding="async"
+              className="w-full h-full rounded object-cover"
+              style={{ border: `1.5px solid ${col}66` }}
+            />
+          : <div className="w-full h-full rounded bg-gray-700" />
+        }
+        {inherited && (
+          <img
+            src={INHERITED_BORDER_SRC}
+            alt=""
+            aria-hidden="true"
+            loading="lazy"
+            decoding="async"
+            fetchpriority="low"
+            className="absolute inset-0 w-full h-full object-fill rounded pointer-events-none select-none"
+          />
+        )}
+      </div>
+
       <div className="flex-1 min-w-0">
         <p className="text-[9px] text-gray-600 leading-tight">{item.Type}</p>
-        <p className="text-[11px] font-medium truncate leading-tight mt-0.5" style={{ color: col }}>{item.Name || '—'}</p>
+        <p className="text-[11px] font-medium truncate leading-tight mt-0.5" style={{ color: col }}>
+          {item.Name || '—'}
+        </p>
       </div>
     </div>
   )
