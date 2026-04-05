@@ -211,3 +211,44 @@ async def get_character_armory(character_name: str):
   if not data:
     raise HTTPException(status_code=404, detail="캐릭터 정보를 불러올 수 없습니다.")
   return data
+
+# ── 원정대 전체 캐릭터 조회 (검색한 캐릭터 기준) ──────────────
+@router.get("/{character_name}/siblings")
+async def get_character_siblings(character_name: str):
+    """검색한 캐릭터의 원정대 전체를 서버별로 반환.
+    DB에서 combat_power·is_support를 1회 배치 쿼리로 보강."""
+    raw = await get_characters(character_name)
+    if not raw:
+        return []
+
+    # ── DB 배치 조회 (N+1 방지) ──────────────────────────────
+    names = [c.get("CharacterName") for c in raw if c.get("CharacterName")]
+    db_map: dict = {}
+    if names:
+        rows = (
+            supabase.table("characters")
+            .select("name, combat_power, is_support")
+            .in_("name", names)
+            .execute()
+        )
+        for row in (rows.data or []):
+            db_map[row["name"]] = row
+
+    def _parse(s: str | None) -> float | None:
+        try:
+            return float(s.replace(",", "")) if s else None
+        except (ValueError, AttributeError):
+            return None
+
+    return [
+        {
+            "name":         c.get("CharacterName"),
+            "server":       c.get("ServerName"),
+            "level":        c.get("CharacterLevel"),
+            "class_name":   c.get("CharacterClassName"),
+            "item_level":   _parse(c.get("ItemAvgLevel")),
+            "combat_power": db_map.get(c.get("CharacterName"), {}).get("combat_power"),
+            "is_support":   db_map.get(c.get("CharacterName"), {}).get("is_support", False),
+        }
+        for c in raw
+    ]

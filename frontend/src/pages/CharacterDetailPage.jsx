@@ -14,6 +14,12 @@ const fetchArmory = (name) =>
     .then((r) => r.data)
     .catch(() => { throw new Error('캐릭터 정보를 불러올 수 없습니다.') })
 
+// 원정대 siblings — 탭 진입 시에만 호출 (lazy)
+const fetchSiblings = (name) =>
+  client.get(`/api/characters/${encodeURIComponent(name)}/siblings`)
+    .then((r) => r.data)
+    .catch(() => [])
+
 /* ─────────────────────────────────────────────
    상수 / 유틸
    ───────────────────────────────────────────── */
@@ -639,45 +645,174 @@ function TabStats({ armory }) {
   )
 }
 
-/* ─────────────────────────────────────────────
-   보유 캐릭터 탭
-   ───────────────────────────────────────────── */
-function TabCharacters({ characters, currentName, onSelect }) {
-  const sorted = [...(characters || [])].sort((a, b) => (b.item_level || 0) - (a.item_level || 0))
+/* ── 아이템 레벨 아이콘 (투구 실루엣) ── */
+function ArmorIcon({ size = 11, color = '#94a3b8' }) {
   return (
-    <div>
-      <SectionTitle>원정대 캐릭터 ({characters?.length || 0}명)</SectionTitle>
-      <div className="flex flex-col gap-1.5">
-        {sorted.map(char => {
-          const isCurrent = char.name === currentName
-          const isSupport = !!char.is_support
-          return (
-            <div
-              key={char.id}
-              onClick={() => !isCurrent && onSelect(char.name)}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border transition-colors ${
-                isCurrent
-                  ? 'border-amber-500/40 bg-amber-500/10 cursor-default'
-                  : 'border-gray-700/40 bg-gray-800/40 hover:bg-gray-800 cursor-pointer'
-              }`}
-            >
-              <div className="w-4 h-4 flex items-center justify-center flex-shrink-0">
-                <RoleIcon isSupport={isSupport} size={13} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className={`text-sm font-medium truncate ${isCurrent ? 'text-amber-400' : 'text-gray-300'}`}>
-                  {char.name}
-                  {isCurrent && <span className="ml-2 text-[10px] text-amber-500/70">현재</span>}
-                </p>
-                <p className="text-xs text-gray-500">{char.class_name}</p>
-              </div>
-              <p className="text-sm font-semibold flex-shrink-0" style={{ color: levelColor(char.item_level) }}>
-                {char.item_level?.toLocaleString() ?? '—'}
-              </p>
+    <svg width={size} height={size} viewBox="0 0 12 12" fill="none">
+      <path d="M6 1C4 1 2 2.5 2 4.5V5.5L1 7H11L10 5.5V4.5C10 2.5 8 1 6 1Z"
+        stroke={color} strokeWidth="1.2" fill="none" strokeLinejoin="round"/>
+      <rect x="2" y="7" width="8" height="4" rx="1" stroke={color} strokeWidth="1.2" fill="none"/>
+    </svg>
+  )
+}
+
+/* ── 보유 캐릭터 탭 ── */
+function TabCharacters({ siblings, currentName, guildName, onSelect, isLoading }) {
+  /* 스켈레톤 */
+  if (isLoading) {
+    return (
+      <div className="space-y-5 animate-pulse">
+        {[0, 1].map(i => (
+          <div key={i}>
+            <div className="h-3 w-20 bg-gray-800 rounded mb-3" />
+            <div className="grid grid-cols-2 gap-2">
+              {[0, 1, 2, 3].map(j => (
+                <div key={j} className="h-[86px] bg-gray-800/60 rounded-xl" />
+              ))}
             </div>
-          )
-        })}
+          </div>
+        ))}
       </div>
+    )
+  }
+
+  if (!siblings.length) {
+    return (
+      <p className="text-sm text-gray-500 py-10 text-center">
+        원정대 정보를 불러올 수 없습니다.
+      </p>
+    )
+  }
+
+  /* ── 서버별 그룹핑 ───────────────────────────────────── */
+  const serverMap = siblings.reduce((acc, char) => {
+    const sv = char.server || '알 수 없음'
+    if (!acc[sv]) acc[sv] = []
+    acc[sv].push(char)
+    return acc
+  }, {})
+
+  /* 현재 캐릭터 서버를 맨 앞으로 */
+  const currentServer = siblings.find(c => c.name === currentName)?.server
+  const servers = Object.keys(serverMap).sort((a, b) => {
+    if (a === currentServer) return -1
+    if (b === currentServer) return 1
+    return 0
+  })
+
+  return (
+    <div className="space-y-6">
+      {servers.map(server => {
+        /* 아이템레벨 내림차순 */
+        const chars = [...serverMap[server]].sort(
+          (a, b) => (b.item_level || 0) - (a.item_level || 0)
+        )
+
+        return (
+          <div key={server}>
+            {/* ── 서버 헤더 ── */}
+            <div className="flex items-center justify-between mb-2.5">
+              <h3 className="text-sm font-bold text-white">{server}</h3>
+              <span className="text-[11px] text-gray-500">
+                보유 캐릭터 {chars.length}
+              </span>
+            </div>
+
+            {/* ── 2열 그리드 ── */}
+            <div className="grid grid-cols-2 gap-2">
+              {chars.map(char => {
+                const isCurrent  = char.name === currentName
+                const isSupport  = !!char.is_support
+                const lColor     = levelColor(char.item_level)
+                const cColor     = cpColor(isSupport)
+                const accentColor = isCurrent ? '#f59e0b' : lColor
+
+                return (
+                  <div
+                    key={char.name}
+                    onClick={() => !isCurrent && onSelect(char.name)}
+                    style={{
+                      borderTop:    '1px solid rgba(75,85,99,0.25)',
+                      borderRight:  '1px solid rgba(75,85,99,0.25)',
+                      borderBottom: '1px solid rgba(75,85,99,0.25)',
+                      borderLeft:   `3px solid ${accentColor}`,
+                    }}
+                    className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-colors ${
+                      isCurrent
+                        ? 'bg-amber-500/8 cursor-default'
+                        : 'bg-gray-800/40 hover:bg-gray-800/70 cursor-pointer'
+                    }`}
+                  >
+                    {/* 초상화 (클래스 이니셜) */}
+                    <div
+                      className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold select-none"
+                      style={{
+                        background: `${lColor}1a`,
+                        border:     `1.5px solid ${lColor}55`,
+                        color:      lColor,
+                      }}
+                    >
+                      {char.class_name?.[0] ?? '?'}
+                    </div>
+
+                    {/* 정보 */}
+                    <div className="flex-1 min-w-0">
+                      {/* 전투레벨 + 직업 */}
+                      <p className="text-[10px] text-gray-500 leading-tight">
+                        Lv.{char.level ?? '—'}&nbsp;{char.class_name}
+                      </p>
+
+                      {/* 캐릭터명 */}
+                      <p className={`text-sm font-bold truncate leading-snug mt-0.5 ${
+                        isCurrent ? 'text-amber-400' : 'text-gray-100'
+                      }`}>
+                        {char.name}
+                        {isCurrent && (
+                          <span className="ml-1.5 text-[10px] text-amber-500/70">현재</span>
+                        )}
+                      </p>
+
+                      {/* 아이템레벨 + 전투력 + 길드 */}
+                      <div className="flex items-center justify-between mt-1 gap-1">
+                        <div className="flex items-center gap-2 min-w-0">
+                          {/* 아이템레벨 */}
+                          <div className="flex items-center gap-0.5">
+                            <ArmorIcon size={10} color={lColor} />
+                            <span
+                              className="text-[11px] font-semibold"
+                              style={{ color: lColor }}
+                            >
+                              {char.item_level?.toLocaleString() ?? '—'}
+                            </span>
+                          </div>
+                          {/* 전투력 */}
+                          {char.combat_power != null && (
+                            <div className="flex items-center gap-0.5">
+                              <RoleIcon isSupport={isSupport} size={10} />
+                              <span
+                                className="text-[11px] font-semibold"
+                                style={{ color: cColor }}
+                              >
+                                {char.combat_power.toLocaleString()}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                        {/* 길드 */}
+                        {guildName && (
+                          <span className="text-[10px] text-gray-500 flex-shrink-0 truncate max-w-[60px]">
+                            {guildName}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -708,6 +843,14 @@ export default function CharacterDetailPage() {
     queryKey: ['armory', name],
     queryFn: () => fetchArmory(name),
     enabled: !!name,
+    staleTime: 1000 * 60 * 5,
+  })
+
+  /* ── 검색 캐릭터의 원정대 (보유 캐릭터 탭 진입 시에만 fetch) ── */
+  const { data: siblings = [], isLoading: siblingsLoading } = useQuery({
+    queryKey: ['siblings', name],
+    queryFn:  () => fetchSiblings(name),
+    enabled:  !!name && activeTab === 'characters',  // 탭 진입 전까지 호출 안 함
     staleTime: 1000 * 60 * 5,
   })
 
@@ -780,7 +923,15 @@ export default function CharacterDetailPage() {
 
   function renderTab() {
     if (activeTab === 'characters') {
-      return <TabCharacters characters={characters} currentName={name} onSelect={n => navigate(`/characters/${n}`)} />
+      return (
+        <TabCharacters
+          siblings={siblings}
+          currentName={name}
+          guildName={guildName}
+          onSelect={n => navigate(`/characters/${n}`)}
+          isLoading={siblingsLoading}
+        />
+      )
     }
     if (!armoryLoading && armoryError) {
       return (

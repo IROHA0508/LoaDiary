@@ -2,7 +2,7 @@ import { useNavigate, useLocation, Outlet } from 'react-router-dom'
 
 const NAV_ITEMS = [
   { label: '랭킹', path: '/ranking' },
-  { label: '거래소', path: '/market' },
+  { label: '시세', path: '/market' },
   { label: '계산기', path: '/calc' },
 ]
 
