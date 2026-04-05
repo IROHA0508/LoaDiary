@@ -39,6 +39,47 @@ const GRADE_COLORS = {
 
 const ARK_COLORS = { '진화': '#f59e0b', '깨달음': '#60a5fa', '도약': '#22c55e' }
 
+/* ── 직업명 → CDN 이미지 슬러그 매핑 ── */
+/* 기본 주소: https://pica.korlark.com/2018/obt/assets/images/common/thumb/{slug}.png */
+const CLASS_IMAGE_MAP = {
+  // 전사
+  '워로드':       'warlord',
+  '배럭':         'berserker',
+  '디스트로이어': 'destroyer',
+  '슬레이어':     'slayer',
+  '홀리나이트':   'holyknight',
+  '발키리':       'valkyrie',
+  // 무도가
+  '배틀마스터':   'battlemaster',
+  '인파이터':     'infighter',
+  '기공사':       'soulmaster',
+  '창술사':       'lancemaster',
+  '스트라이커':   'striker',
+  '브레이커':     'breaker',
+  // 사냥꾼
+  '데빌헌터':     'devilhunter',
+  '블래스터':     'blaster',
+  '호크아이':     'hawkeye',
+  '스카우터':     'scouter',
+  '건슬링어':     'gunslinger',
+  // 마법사
+  '아르카나':     'arcana',
+  '소서리스':     'sorceress',
+  '서머너':       'summoner',
+  '바드':         'bard',
+  // 암살자
+  '블레이드':     'blade',
+  '데모닉':       'demonic',
+  '리퍼':         'reaper',
+  '소울이터':     'souleater',
+  // 스페셜리스트
+  '도화가':       'artist',
+  '기상술사':     'aeromancer',
+  '환수사' :      'alchemist',
+  '가디언나이트': 'dragon_knight'
+}
+const CDN_BASE = '/images/classes'
+
 /* HTML 태그 제거 */
 function stripHtml(str) {
   if (!str) return ''
@@ -645,6 +686,37 @@ function TabStats({ armory }) {
   )
 }
 
+/* ── 직업 아바타 — CDN 이미지 + 이니셜 fallback ── */
+function ClassAvatar({ className, color }) {
+  const [imgError, setImgError] = useState(false)
+  const slug = CLASS_IMAGE_MAP[className]
+  const showImg = !!slug && !imgError
+
+  return (
+    <div
+      className="w-10 h-10 rounded-full flex-shrink-0 overflow-hidden flex items-center justify-center text-xs font-bold select-none"
+      style={{
+        border:     `1.5px solid ${color}55`,
+        background: showImg ? 'transparent' : `${color}1a`,
+        color,
+      }}
+    >
+      {showImg ? (
+        <img
+          src={`${CDN_BASE}/${slug}.png`}
+          alt={className}
+          loading="lazy"
+          decoding="async"
+          onError={() => setImgError(true)}
+          className="w-full h-full object-cover object-top"
+        />
+      ) : (
+        className?.[0] ?? '?'
+      )}
+    </div>
+  )
+}
+
 /* ── 아이템 레벨 아이콘 (투구 실루엣) ── */
 function ArmorIcon({ size = 11, color = '#94a3b8' }) {
   return (
@@ -743,17 +815,8 @@ function TabCharacters({ siblings, currentName, guildName, onSelect, isLoading }
                         : 'bg-gray-800/40 hover:bg-gray-800/70 cursor-pointer'
                     }`}
                   >
-                    {/* 초상화 (클래스 이니셜) */}
-                    <div
-                      className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold select-none"
-                      style={{
-                        background: `${lColor}1a`,
-                        border:     `1.5px solid ${lColor}55`,
-                        color:      lColor,
-                      }}
-                    >
-                      {char.class_name?.[0] ?? '?'}
-                    </div>
+                    {/* 초상화 — 직업 CDN 이미지 (실패 시 이니셜 fallback) */}
+                    <ClassAvatar className={char.class_name} color={lColor} />
 
                     {/* 정보 */}
                     <div className="flex-1 min-w-0">

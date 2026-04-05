@@ -101,8 +101,20 @@ function AppRoutes(){
 
           {/* 헤더에 있는 랭킹, 거래소, 떠돌이 상인 페이지 */}
           <Route path="ranking" element={<RankingPage />} />
-          <Route path="market" element={<MarketPage />} />
-          <Route path="calc" element={<CalcPage />} />
+
+          {/* 시세 하위 라우트 */}
+          <Route path="market/refine"   element={<MarketPage category="refine" />} />
+          <Route path="market/life"     element={<MarketPage category="life" />} />
+          <Route path="market/engraving" element={<MarketPage category="engraving" />} />
+          <Route path="market/gem"      element={<MarketPage category="gem" />} />
+
+          {/* 계산기 하위 라우트 */}
+          <Route path="calc/refine-normal"    element={<CalcPage category="refine-normal" />} />
+          <Route path="calc/refine-advanced"  element={<CalcPage category="refine-advanced" />} />
+          <Route path="calc/auction"          element={<CalcPage category="auction" />} />
+          <Route path="calc/more"             element={<CalcPage category="more" />} />
+          <Route path="calc/craft"            element={<CalcPage category="craft" />} />
+          <Route path="calc/card"             element={<CalcPage category="card" />} />
 
           {/* 캐릭터 상세 페이지  */}
           <Route path="characters/:name" element={<CharacterDetailPage />} />

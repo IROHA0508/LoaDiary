@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" width="240" height="240">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="40%" r="55%">
+      <stop offset="0%" stop-color="#3b2a6e"/>
+      <stop offset="100%" stop-color="#1a1035"/>
+    </radialGradient>
+    <radialGradient id="panel" cx="50%" cy="30%" r="60%">
+      <stop offset="0%" stop-color="#4c3a8a"/>
+      <stop offset="100%" stop-color="#2d1f5e"/>
+    </radialGradient>
+    <radialGradient id="gem" cx="40%" cy="30%" r="60%">
+      <stop offset="0%" stop-color="#e8a020"/>
+      <stop offset="100%" stop-color="#a06010"/>
+    </radialGradient>
+  </defs>
+
+  <!-- 배경 -->
+  <rect width="240" height="240" rx="36" fill="url(#bg)" stroke="#6040b0" stroke-width="2"/>
+
+  <!-- 책 패널 -->
+  <rect x="28" y="24" width="184" height="192" rx="20" fill="url(#panel)" stroke="#8060d0" stroke-width="1.5"/>
+
+  <!-- 바인딩 -->
+  <rect x="28" y="24" width="22" height="192" rx="10" fill="#2a1a50" stroke="#6040a0" stroke-width="1"/>
+  <line x1="50" y1="24" x2="50" y2="216" stroke="#5030a0" stroke-width="1"/>
+
+  <!-- 제목 장식 테두리 -->
+  <rect x="60" y="36" width="140" height="24" rx="6" fill="none" stroke="#7050c0" stroke-width="1" stroke-dasharray="4,2"/>
+
+  <!-- 상단 점 3개 (더보기) -->
+  <circle cx="110" cy="48" r="5" fill="#c8a0ff"/>
+  <circle cx="130" cy="48" r="5" fill="#c8a0ff"/>
+  <circle cx="150" cy="48" r="5" fill="#c8a0ff"/>
+
+  <!-- 구분선 -->
+  <line x1="58" y1="70" x2="202" y2="70" stroke="#5030a0" stroke-width="1"/>
+
+  <!-- 행 1 -->
+  <rect x="62" y="80" width="20" height="20" rx="4" fill="#e87030"/>
+  <text x="72" y="95" text-anchor="middle" font-size="13" fill="white" font-weight="700" font-family="sans-serif">+</text>
+  <rect x="90" y="84" width="90" height="6" rx="3" fill="#6040a0" opacity="0.9"/>
+  <rect x="90" y="94" width="60" height="4" rx="2" fill="#403070" opacity="0.6"/>
+
+  <!-- 행 2 -->
+  <rect x="62" y="110" width="20" height="20" rx="4" fill="#9060e0"/>
+  <text x="72" y="125" text-anchor="middle" font-size="13" fill="white" font-weight="700" font-family="sans-serif">×</text>
+  <rect x="90" y="114" width="80" height="6" rx="3" fill="#6040a0" opacity="0.9"/>
+  <rect x="90" y="124" width="50" height="4" rx="2" fill="#403070" opacity="0.6"/>
+
+  <!-- 행 3 -->
+  <rect x="62" y="140" width="20" height="20" rx="4" fill="#30a090"/>
+  <text x="72" y="155" text-anchor="middle" font-size="13" fill="white" font-weight="700" font-family="sans-serif">%</text>
+  <rect x="90" y="144" width="100" height="6" rx="3" fill="#6040a0" opacity="0.9"/>
+  <rect x="90" y="154" width="70" height="4" rx="2" fill="#403070" opacity="0.6"/>
+
+  <!-- 하단 구분선 -->
+  <line x1="58" y1="172" x2="202" y2="172" stroke="#5030a0" stroke-width="0.8" stroke-dasharray="3,2"/>
+
+  <!-- 하단 금색 점 3개 -->
+  <circle cx="100" cy="192" r="7" fill="url(#gem)" stroke="#c07010" stroke-width="1"/>
+  <circle cx="120" cy="192" r="7" fill="url(#gem)" stroke="#c07010" stroke-width="1"/>
+  <circle cx="140" cy="192" r="7" fill="url(#gem)" stroke="#c07010" stroke-width="1"/>
+
+  <!-- 모서리 보석 -->
+  <circle cx="44" cy="44" r="5" fill="url(#gem)" stroke="#e0c060" stroke-width="0.8"/>
+  <circle cx="196" cy="44" r="5" fill="url(#gem)" stroke="#e0c060" stroke-width="0.8"/>
+  <circle cx="44" cy="196" r="5" fill="url(#gem)" stroke="#e0c060" stroke-width="0.8"/>
+  <circle cx="196" cy="196" r="5" fill="url(#gem)" stroke="#e0c060" stroke-width="0.8"/>
+</svg>
