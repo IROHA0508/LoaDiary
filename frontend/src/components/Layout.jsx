@@ -28,7 +28,7 @@ const MARKET_DROPDOWN = {
     },
     {
       label: '보석',
-      path: '/market/gem',
+      path: '/market/jewel',
       icon: 'https://cdn-lostark.game.onstove.com/efui_iconatlas/use/use_13_55.png',
     },
   ],

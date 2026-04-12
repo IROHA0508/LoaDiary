@@ -106,7 +106,7 @@ function AppRoutes(){
           <Route path="market/refine"   element={<MarketPage category="refine" />} />
           <Route path="market/life"     element={<MarketPage category="life" />} />
           <Route path="market/engraving" element={<MarketPage category="engraving" />} />
-          <Route path="market/gem"      element={<MarketPage category="gem" />} />
+          <Route path="market/jewel"      element={<MarketPage category="jewel" />} />
 
           {/* 계산기 하위 라우트 */}
           <Route path="calc/refine-normal"    element={<CalcPage category="refine-normal" />} />
