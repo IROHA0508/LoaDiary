@@ -1,9 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-from app.api import users, characters, raids
+from app.api import users, characters, raids, groups
 from app.db.supabase_client import check_connection
-from app.api import groups
+from app.api import market, jewel
 
 # 서버 시작시 DB연결 확인 추가
 @asynccontextmanager
@@ -42,7 +42,8 @@ app.add_middleware(
 app.include_router(users.router, prefix="/api/users", tags = ["users"])
 app.include_router(characters.router, prefix="/api/characters", tags = ["characters"])
 app.include_router(raids.router, prefix="/api/raids", tags = ["raids"])
-app.include_router(groups.router, prefix="/api/groups", tags=["groups"])
+app.include_router(market.router,     prefix="/api/market",      tags=["market"])   # ← 추가
+app.include_router(jewel.router,      prefix="/api/jewel",       tags=["jewel"])  
 
 @app.get("/")
 def root():

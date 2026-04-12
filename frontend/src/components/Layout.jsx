@@ -17,7 +17,7 @@ const MARKET_DROPDOWN = {
       icon: 'https://static.lo4.app/icons/breath.png',
     },
     {
-      label: '융화 재료',
+      label: '생활 재료',
       path: '/market/life',
       icon: 'https://cdn-lostark.game.onstove.com/efui_iconatlas/lifelevel/lifelevel_02_48.png',
     },
