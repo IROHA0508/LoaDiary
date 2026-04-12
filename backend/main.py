@@ -42,8 +42,8 @@ app.add_middleware(
 app.include_router(users.router, prefix="/api/users", tags = ["users"])
 app.include_router(characters.router, prefix="/api/characters", tags = ["characters"])
 app.include_router(raids.router, prefix="/api/raids", tags = ["raids"])
-app.include_router(market.router,     prefix="/api/market",      tags=["market"])   # ← 추가
-app.include_router(jewel.router,      prefix="/api/jewel",       tags=["jewel"])  
+app.include_router(market.router, prefix="/api/market", tags=["market"])   # ← 추가
+app.include_router(jewel.router, prefix="/api/jewel", tags=["jewel"])  
 
 @app.get("/")
 def root():

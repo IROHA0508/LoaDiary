@@ -14,7 +14,7 @@ import { getMarketItems, getMarketHistory, getJewelItems } from '../../api/marke
 const ENGRAVING_ICON = 'https://cdn-lostark.game.onstove.com/efui_iconatlas/use/use_9_25.png'
 
 // 보석: 레벨·종류별 지정 아이콘
-const GEM_ICON = {
+const JEWEL_ICON = {
   '10레벨 겁화의 보석': 'https://cdn-lostark.game.onstove.com/efui_iconatlas/use/use_12_105.png',
   '9레벨 겁화의 보석':  'https://cdn-lostark.game.onstove.com/efui_iconatlas/use/use_12_104.png',
   '8레벨 겁화의 보석':  'https://cdn-lostark.game.onstove.com/efui_iconatlas/use/use_12_103.png',
@@ -36,14 +36,14 @@ const CATEGORY_META = {
   refine:    { label: '재련 재료', hasChart: true  },
   life:      { label: '생활 재료', hasChart: true  },
   engraving: { label: '각인서',    hasChart: true  },
-  gem:       { label: '보석',      hasChart: false },
+  jewel:     { label: '보석',      hasChart: false },
 }
 
 /* ─────────────────────────────────────────────
    정적 아이템 목록
    - 이름·아이콘은 즉시 표시 (API 대기 없음)
    - 가격은 API 응답 후 채워짐
-   - gem : 순서 고정
+   - jewel : 순서 고정
    - engraving : 가격 로드 후 내림차순 재정렬
    ───────────────────────────────────────────── */
 const STATIC_ITEMS = {
@@ -173,19 +173,19 @@ const STATIC_ITEMS = {
 
   /* ── 보석 (고정 순서) ────────────────────────── */
   // 10~6 겁화 → 10~6 작열 → 10 멸화 → 10 홍염
-  gem: [
-    { name: '10레벨 겁화의 보석', icon: GEM_ICON['10레벨 겁화의 보석'] },
-    { name: '9레벨 겁화의 보석',  icon: GEM_ICON['9레벨 겁화의 보석']  },
-    { name: '8레벨 겁화의 보석',  icon: GEM_ICON['8레벨 겁화의 보석']  },
-    { name: '7레벨 겁화의 보석',  icon: GEM_ICON['7레벨 겁화의 보석']  },
-    { name: '6레벨 겁화의 보석',  icon: GEM_ICON['6레벨 겁화의 보석']  },
-    { name: '10레벨 작열의 보석', icon: GEM_ICON['10레벨 작열의 보석'] },
-    { name: '9레벨 작열의 보석',  icon: GEM_ICON['9레벨 작열의 보석']  },
-    { name: '8레벨 작열의 보석',  icon: GEM_ICON['8레벨 작열의 보석']  },
-    { name: '7레벨 작열의 보석',  icon: GEM_ICON['7레벨 작열의 보석']  },
-    { name: '6레벨 작열의 보석',  icon: GEM_ICON['6레벨 작열의 보석']  },
-    { name: '10레벨 멸화의 보석', icon: GEM_ICON['10레벨 멸화의 보석'] },
-    { name: '10레벨 홍염의 보석', icon: GEM_ICON['10레벨 홍염의 보석'] },
+  jewel: [
+    { name: '10레벨 겁화의 보석', icon: JEWEL_ICON['10레벨 겁화의 보석'] },
+    { name: '9레벨 겁화의 보석',  icon: JEWEL_ICON['9레벨 겁화의 보석']  },
+    { name: '8레벨 겁화의 보석',  icon: JEWEL_ICON['8레벨 겁화의 보석']  },
+    { name: '7레벨 겁화의 보석',  icon: JEWEL_ICON['7레벨 겁화의 보석']  },
+    { name: '6레벨 겁화의 보석',  icon: JEWEL_ICON['6레벨 겁화의 보석']  },
+    { name: '10레벨 작열의 보석', icon: JEWEL_ICON['10레벨 작열의 보석'] },
+    { name: '9레벨 작열의 보석',  icon: JEWEL_ICON['9레벨 작열의 보석']  },
+    { name: '8레벨 작열의 보석',  icon: JEWEL_ICON['8레벨 작열의 보석']  },
+    { name: '7레벨 작열의 보석',  icon: JEWEL_ICON['7레벨 작열의 보석']  },
+    { name: '6레벨 작열의 보석',  icon: JEWEL_ICON['6레벨 작열의 보석']  },
+    { name: '10레벨 멸화의 보석', icon: JEWEL_ICON['10레벨 멸화의 보석'] },
+    { name: '10レ벨 홍염의 보석', icon: JEWEL_ICON['10レベル 홍염의 보석'] },
   ],
 }
 
@@ -362,12 +362,12 @@ function ChartPanel({ item }) {
 export default function MarketPage({ category }) {
   const [selectedItem, setSelectedItem] = useState(null)
   const meta  = CATEGORY_META[category] ?? { label: category, hasChart: true }
-  const isGem = category === 'gem'
+  const isJewel = category === 'jewel'
 
   // ── 가격 데이터만 API에서 fetch ──────────────
   const { data: apiItems = [], isLoading: priceLoading, isError: priceError } = useQuery({
     queryKey: ['market-items', category],
-    queryFn:  isGem ? getJewelItems : () => getMarketItems(category),
+    queryFn:  isJewel ? getJewelItems : () => getMarketItems(category),
     staleTime: 1000 * 60,
     refetchInterval: 1000 * 60,  // ✅ 최적화: 1분 백그라운드 갱신
   })
@@ -400,19 +400,34 @@ export default function MarketPage({ category }) {
         (b.current_min_price ?? -1) - (a.current_min_price ?? -1)
       )
     }
-    // refine·life·gem: 정적 목록 순서 유지
+    // refine·life·jewel: 정적 목록 순서 유지
     return merged
   }, [category, priceMap])
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white flex flex-col">
+    // ✅ h-[calc(100vh-48px)]: 헤더(h-12=48px) 제외한 뷰포트를 정확히 채움
+    // ✅ overflow-hidden: 페이지 자체 스크롤 완전 차단 — 사이드바만 스크롤
+    <div className="h-[calc(100vh-48px)] overflow-hidden bg-gray-950 text-white flex flex-col">
 
-      {/* 페이지 타이틀 */}
-      <div className="px-6 pt-5 pb-3 border-b border-gray-800 flex items-center justify-between">
+      {/* ✅ MainPage와 동일한 스크롤바 스타일 */}
+      <style>{`
+        .market-scroll::-webkit-scrollbar { width: 3px; }
+        .market-scroll::-webkit-scrollbar-track { background: transparent; }
+        .market-scroll::-webkit-scrollbar-thumb {
+          background: rgba(75, 85, 99, 0.45);
+          border-radius: 4px;
+        }
+        .market-scroll::-webkit-scrollbar-thumb:hover {
+          background: rgba(107, 114, 128, 0.65);
+        }
+      `}</style>
+
+      {/* 페이지 타이틀 — Layout 헤더와 동일한 max-w-[1400px] mx-auto px-8 */}
+      <div className="max-w-[1400px] mx-auto w-full px-8 pt-5 pb-3 border-b border-gray-800 flex items-center justify-between flex-shrink-0">
         <div>
           <h1 className="text-lg font-bold text-white">{meta.label} 시세</h1>
           <p className="text-xs text-gray-500 mt-0.5">
-            {isGem
+            {isJewel
               ? '경매장 기준 최저가 · 차트 미제공'
               : '거래소 기준 최저가 · 30일 히스토리 차트'}
           </p>
@@ -426,14 +441,13 @@ export default function MarketPage({ category }) {
         )}
       </div>
 
-      {/* 본문: 사이드바 + 메인 패널 */}
-      <div className="flex flex-1 min-h-0 overflow-hidden">
+      {/* 본문: 사이드바 + 메인 패널 — 타이틀과 동일한 max-w 컨테이너 */}
+      <div className="max-w-[1400px] mx-auto w-full flex flex-1 min-h-0 overflow-hidden">
 
         {/* ── 사이드바 ─────────────────────────── */}
         <aside className="w-72 flex-shrink-0 border-r border-gray-800 flex flex-col overflow-hidden">
           {/* ✅ 목록은 API와 무관하게 즉시 표시 */}
-          <div className="flex-1 overflow-y-auto py-2 px-2 space-y-0.5
-            scrollbar-thin scrollbar-track-transparent scrollbar-thumb-gray-700">
+          <div className="market-scroll flex-1 overflow-y-auto py-2 px-2 space-y-0.5">
             {displayItems.map((item) => (
               <ItemRow
                 key={item.name}
@@ -454,7 +468,7 @@ export default function MarketPage({ category }) {
           {!selectedItem ? (
             <div className="flex-1 flex flex-col items-center justify-center gap-2">
               <p className="text-gray-400 text-sm">왼쪽 목록에서 아이템을 선택하세요</p>
-              {!isGem && (
+              {!isJewel && (
                 <p className="text-gray-600 text-xs">
                   선택 시 30일 가격 · 판매량 차트를 확인할 수 있습니다
                 </p>
