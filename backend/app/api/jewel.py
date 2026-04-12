@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.lostark import get_all_jewel_prices, get_jewel_price, GEM_NAMES
+from app.lostark import get_all_jewel_prices, get_jewel_price, JEWEL_NAMES_NAMES
 
 router = APIRouter()
 
