@@ -10,10 +10,9 @@ import { getMarketItems, getMarketHistory, getJewelItems } from '../../api/marke
 /* ─────────────────────────────────────────────
    아이콘 상수
    ───────────────────────────────────────────── */
-// 각인서: 드롭다운과 동일한 고정 아이콘
 const ENGRAVING_ICON = 'https://cdn-lostark.game.onstove.com/efui_iconatlas/use/use_9_25.png'
 
-// 보석: 레벨·종류별 지정 아이콘
+// 보석(경매장) 아이콘 — 아크그리드 gem과 구분하여 JEWEL_ICON 사용
 const JEWEL_ICON = {
   '10레벨 겁화의 보석': 'https://cdn-lostark.game.onstove.com/efui_iconatlas/use/use_12_105.png',
   '9레벨 겁화의 보석':  'https://cdn-lostark.game.onstove.com/efui_iconatlas/use/use_12_104.png',
@@ -43,49 +42,40 @@ const CATEGORY_META = {
    정적 아이템 목록
    - 이름·아이콘은 즉시 표시 (API 대기 없음)
    - 가격은 API 응답 후 채워짐
-   - jewel : 순서 고정
-   - engraving : 가격 로드 후 내림차순 재정렬
+   - jewel    : 순서 고정 (2열 그리드)
+   - engraving: 가격 로드 후 내림차순 재정렬
    ───────────────────────────────────────────── */
 const STATIC_ITEMS = {
 
   /* ── 재련 재료 ───────────────────────────────── */
   refine: [
-    // T4 파괴·수호석
     { name: '운명의 파괴석 결정' },
     { name: '운명의 파괴석' },
     { name: '운명의 수호석 결정' },
     { name: '운명의 수호석' },
-    // T4 파편
     { name: '운명의 파편 주머니(소)' },
     { name: '운명의 파편 주머니(중)' },
     { name: '운명의 파편 주머니(대)' },
-    // T4 돌파석
     { name: '운명의 돌파석' },
     { name: '위대한 운명의 돌파석' },
-    // T4 융화재료
     { name: '상급 아비도스 융화 재료' },
     { name: '아비도스 융화 재료' },
-    // T3 파괴·수호석
     { name: '정제된 파괴강석' },
     { name: '파괴강석' },
     { name: '파괴석 결정' },
     { name: '정제된 수호강석' },
     { name: '수호강석' },
     { name: '수호석 결정' },
-    // T3 돌파석
     { name: '찬란한 명예의 돌파석' },
     { name: '경이로운 명예의 돌파석' },
     { name: '명예의 돌파석' },
     { name: '위대한 명예의 돌파석' },
-    // T3 파편
     { name: '명예의 파편 주머니(소)' },
     { name: '명예의 파편 주머니(중)' },
     { name: '명예의 파편 주머니(대)' },
-    // T3 융화재료
     { name: '최상급 오레하 융화 재료' },
     { name: '상급 오레하 융화 재료' },
     { name: '오레하 융화 재료' },
-    // 강화 추가 재료
     { name: '강화 야금술 : 업화 [19-20]' },
     { name: '강화 재봉술 : 업화 [19-20]' },
     { name: '야금술 : 업화 [19-20]' },
@@ -102,32 +92,34 @@ const STATIC_ITEMS = {
 
   /* ── 생활 재료 ───────────────────────────────── */
   life: [
-    // 식물채집
     { name: '들꽃' },
-    { name: '투박한 버섯' },
-    { name: '야생초' },
-    { name: '목화솜' },
-    // 벌목
+    { name: '수줍은 들꽃' },
+    { name: '화사한 들꽃' },
+    { name: '아비도스 들꽃' },
     { name: '목재' },
-    { name: '두꺼운 나무' },
-    { name: '특수목재' },
-    // 채광
+    { name: '부드러운 목재' },
+    { name: '튼튼한 목재' },
+    { name: '아비도스 목재' },
     { name: '철광석' },
+    { name: '묵직한 철광석' },
     { name: '단단한 철광석' },
-    { name: '표준 강석' },
-    // 수렵
+    { name: '아비도스 철광석' },
+    { name: '진귀한 가죽' },
     { name: '두툼한 생고기' },
-    { name: '철제 가죽' },
-    // 낚시
-    { name: '생선 살' },
-    { name: '두툼한 생선 살' },
-    // 고고학
+    { name: '다듬은 생고기' },
+    { name: '오레하 두툼한 생고기' },
+    { name: '아비도스 두툼한 생고기' },
+    { name: '생선' },
+    { name: '붉은 살 생선' },
+    { name: '오레하 태양 잉어' },
+    { name: '아비도스 태양 잉어' },
     { name: '고대 유물' },
-    { name: '희귀한 고대 유물' },
+    { name: '희귀한 유물' },
+    { name: '오레하 유물' },
+    { name: '아비도스 유물' },
   ],
 
   /* ── 각인서 (유물 전투) ──────────────────────── */
-  // 가격 로드 후 내림차순 재정렬 — 초기 순서는 의미 없음
   engraving: [
     { name: '원한 각인서',          icon: ENGRAVING_ICON },
     { name: '아드레날린 각인서',     icon: ENGRAVING_ICON },
@@ -169,10 +161,13 @@ const STATIC_ITEMS = {
     { name: '실드관통 각인서',       icon: ENGRAVING_ICON },
     { name: '강화 방패 각인서',      icon: ENGRAVING_ICON },
     { name: '에테르 포식자 각인서',  icon: ENGRAVING_ICON },
+    { name: '굳은 의지 각인서',      icon: ENGRAVING_ICON },
+    { name: '여신의 가호 각인서',    icon: ENGRAVING_ICON },
+    { name: '탈출의 명수 각인서',    icon: ENGRAVING_ICON },
   ],
 
-  /* ── 보석 (고정 순서) ────────────────────────── */
-  // 10~6 겁화 → 10~6 작열 → 10 멸화 → 10 홍염
+  /* ── 보석(경매장) — 2열 그리드용 고정 순서 ────── */
+  // [0~4] 겁화 10→6 / [5~9] 작열 10→6 / [10] 멸화 / [11] 홍염
   jewel: [
     { name: '10레벨 겁화의 보석', icon: JEWEL_ICON['10레벨 겁화의 보석'] },
     { name: '9레벨 겁화의 보석',  icon: JEWEL_ICON['9레벨 겁화의 보석']  },
@@ -185,14 +180,14 @@ const STATIC_ITEMS = {
     { name: '7레벨 작열의 보석',  icon: JEWEL_ICON['7레벨 작열의 보석']  },
     { name: '6레벨 작열의 보석',  icon: JEWEL_ICON['6레벨 작열의 보석']  },
     { name: '10레벨 멸화의 보석', icon: JEWEL_ICON['10레벨 멸화의 보석'] },
-    { name: '10レ벨 홍염의 보석', icon: JEWEL_ICON['10レベル 홍염의 보석'] },
+    { name: '10레벨 홍염의 보석', icon: JEWEL_ICON['10레벨 홍염의 보석'] },
   ],
 }
 
 /* ─────────────────────────────────────────────
    숫자 포맷 유틸
    ───────────────────────────────────────────── */
-// ✅ 최적화: Intl.NumberFormat 인스턴스 재사용 — 매 호출마다 생성하지 않음
+// ✅ 최적화: Intl.NumberFormat 인스턴스 재사용
 const numFmt = new Intl.NumberFormat('ko-KR')
 const formatGold = (v) => (v == null ? '-' : numFmt.format(v))
 
@@ -214,7 +209,7 @@ function DiffBadge({ diff, diffPct }) {
 }
 
 /* ─────────────────────────────────────────────
-   사이드바 아이템 행
+   사이드바 아이템 행 (재련·생활·각인서용)
    ───────────────────────────────────────────── */
 // ✅ 최적화: React.memo — 선택 상태·가격이 바뀐 항목만 리렌더
 const ItemRow = memo(function ItemRow({ item, selected, onClick }) {
@@ -229,32 +224,94 @@ const ItemRow = memo(function ItemRow({ item, selected, onClick }) {
           : 'hover:bg-gray-800/60 border border-transparent'
         }`}
     >
-      {/* 아이콘: 정적 정의 아이콘은 즉시 표시, 없으면 placeholder */}
       {item.icon
-        ? <img
-            src={item.icon}
-            alt={item.name}
-            loading="lazy"
-            decoding="async"
-            className="w-9 h-9 rounded-lg flex-shrink-0 object-cover border border-gray-700"
-          />
+        ? <img src={item.icon} alt={item.name} loading="lazy" decoding="async"
+            className="w-9 h-9 rounded-lg flex-shrink-0 object-cover border border-gray-700" />
         : <div className="w-9 h-9 rounded-lg flex-shrink-0 bg-gray-800/80 border border-gray-700" />
       }
-
-      {/* 이름 + 가격 + 변동 */}
       <div className="flex-1 min-w-0">
         <p className="text-sm text-white truncate leading-tight">{item.name}</p>
-        <p className={`text-sm font-bold mt-0.5 ${price != null ? 'text-amber-300' : 'text-gray-600'}`}>
-          {formatGold(price)}
-        </p>
-        <DiffBadge diff={item.diff} diffPct={item.diff_pct} />
+        {/* ✅ 가격 옆에 변동 뱃지 인라인 배치 */}
+        <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+          <p className={`text-sm font-bold ${price != null ? 'text-amber-300' : 'text-gray-600'}`}>
+            {formatGold(price)}
+          </p>
+          <DiffBadge diff={item.diff} diffPct={item.diff_pct} />
+        </div>
       </div>
     </button>
   )
 })
 
 /* ─────────────────────────────────────────────
-   커스텀 Tooltip
+   보석 카드 (JewelGrid 내부 셀)
+   ───────────────────────────────────────────── */
+function JewelCard({ item }) {
+  if (!item) return <div />
+  const price = item.current_min_price ?? item.buy_price
+  return (
+    <div className="bg-gray-900/60 border border-gray-800 rounded-xl p-3 flex items-center gap-3
+      hover:border-gray-700 transition-colors">
+      {item.icon
+        ? <img src={item.icon} alt={item.name} loading="lazy" decoding="async"
+            className="w-11 h-11 rounded-lg border border-gray-700 flex-shrink-0 object-cover" />
+        : <div className="w-11 h-11 rounded-lg flex-shrink-0 bg-gray-800 border border-gray-700" />
+      }
+      <div className="min-w-0 flex-1">
+        <p className="text-xs text-gray-400 truncate">{item.name}</p>
+        {/* ✅ 가격 옆에 변동 뱃지 인라인 배치 */}
+        <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+          <p className={`text-sm font-bold ${price != null ? 'text-amber-300' : 'text-gray-600 animate-pulse'}`}>
+            {formatGold(price)}
+          </p>
+          <DiffBadge diff={item.diff} diffPct={item.diff_pct} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ─────────────────────────────────────────────
+   보석 2열 그리드 레이아웃
+   ───────────────────────────────────────────── */
+// items 배열 구조:
+//   [0~4]  겁화 10→6레벨   (왼쪽 열)
+//   [5~9]  작열 10→6레벨   (오른쪽 열)
+//   [10]   멸화 10레벨      (마지막 행 왼쪽)
+//   [11]   홍염 10레벨      (마지막 행 오른쪽)
+function JewelGrid({ items }) {
+  // ✅ 최적화: useMemo — items 변경 시에만 rows 재계산
+  const rows = useMemo(() => [
+    [items[0],  items[5]],   // 10겁화 | 10작열
+    [items[1],  items[6]],   //  9겁화 |  9작열
+    [items[2],  items[7]],   //  8겁화 |  8작열
+    [items[3],  items[8]],   //  7겁화 |  7작열
+    [items[4],  items[9]],   //  6겁화 |  6작열
+    [items[10], items[11]],  // 10멸화 | 10홍염
+  ], [items])
+
+  return (
+    <div className="market-scroll flex-1 overflow-y-auto p-6">
+      {/* 열 헤더 */}
+      <div className="grid grid-cols-2 gap-3 mb-2 max-w-2xl">
+        <p className="text-xs font-semibold text-gray-500 px-1">겁화</p>
+        <p className="text-xs font-semibold text-gray-500 px-1">작열</p>
+      </div>
+      {/* 아이템 행 */}
+      <div className="space-y-2 max-w-2xl">
+        {rows.map((row, i) => (
+          <div key={i} className="grid grid-cols-2 gap-3">
+            <JewelCard item={row[0]} />
+            <JewelCard item={row[1]} />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/* ─────────────────────────────────────────────
+   커스텀 Tooltip (차트용)
    ───────────────────────────────────────────── */
 function ChartTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null
@@ -271,15 +328,14 @@ function ChartTooltip({ active, payload, label }) {
 }
 
 /* ─────────────────────────────────────────────
-   차트 패널
+   차트 패널 (재련·생활·각인서용)
    ───────────────────────────────────────────── */
 function ChartPanel({ item }) {
   const { data: history = [], isLoading } = useQuery({
-    // ✅ 최적화: id+grade 조합 캐시 키 — 동일 아이템 재선택 시 재요청 없음
     queryKey: ['market-history', item.id, item.grade],
     queryFn:  () => getMarketHistory(item.id, item.grade),
     staleTime: 1000 * 60 * 5,
-    enabled:   !!item.id,  // 가격 미로드(id=null)이면 요청 안 함
+    enabled:   !!item.id,
   })
 
   if (!item.id) return (
@@ -303,7 +359,7 @@ function ChartPanel({ item }) {
     [...history]
       .sort((a, b) => a.date.localeCompare(b.date))
       .map((row) => ({
-        date:   row.date.slice(5),  // MM-DD
+        date:   row.date.slice(5),
         최저가: row.avg_price,
         판매량: row.trade_count,
       })),
@@ -314,42 +370,15 @@ function ChartPanel({ item }) {
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart data={chartData} margin={{ top: 8, right: 16, left: 8, bottom: 4 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-          <XAxis
-            dataKey="date"
-            tick={{ fill: '#9ca3af', fontSize: 11 }}
-            tickLine={false}
-            axisLine={{ stroke: '#374151' }}
-          />
-          {/* 왼쪽 y축: 최저가 */}
-          <YAxis
-            yAxisId="gold"
-            orientation="left"
-            tick={{ fill: '#f59e0b', fontSize: 11 }}
-            tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}K` : v}
-            tickLine={false}
-            axisLine={false}
-          />
-          {/* 오른쪽 y축: 판매량 */}
-          <YAxis
-            yAxisId="trade"
-            orientation="right"
-            tick={{ fill: '#60a5fa', fontSize: 11 }}
-            tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(1)}K` : v}
-            tickLine={false}
-            axisLine={false}
-          />
+          <XAxis dataKey="date" tick={{ fill: '#9ca3af', fontSize: 11 }} tickLine={false} axisLine={{ stroke: '#374151' }} />
+          <YAxis yAxisId="gold" orientation="left" tick={{ fill: '#f59e0b', fontSize: 11 }}
+            tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}K` : v} tickLine={false} axisLine={false} />
+          <YAxis yAxisId="trade" orientation="right" tick={{ fill: '#60a5fa', fontSize: 11 }}
+            tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(1)}K` : v} tickLine={false} axisLine={false} />
           <Tooltip content={<ChartTooltip />} />
           <Legend wrapperStyle={{ fontSize: 12, color: '#9ca3af' }} />
-          {/* 막대: 판매량 */}
-          <Bar yAxisId="trade" dataKey="판매량"
-            fill="#3b82f6" fillOpacity={0.35}
-            radius={[2, 2, 0, 0]} maxBarSize={20}
-          />
-          {/* 꺾은선: 최저가 */}
-          <Line yAxisId="gold" type="monotone" dataKey="최저가"
-            stroke="#f59e0b" strokeWidth={2}
-            dot={false} activeDot={{ r: 4, fill: '#f59e0b' }}
-          />
+          <Bar yAxisId="trade" dataKey="판매량" fill="#3b82f6" fillOpacity={0.35} radius={[2, 2, 0, 0]} maxBarSize={20} />
+          <Line yAxisId="gold" type="monotone" dataKey="최저가" stroke="#f59e0b" strokeWidth={2} dot={false} activeDot={{ r: 4, fill: '#f59e0b' }} />
         </ComposedChart>
       </ResponsiveContainer>
     </div>
@@ -361,18 +390,18 @@ function ChartPanel({ item }) {
    ───────────────────────────────────────────── */
 export default function MarketPage({ category }) {
   const [selectedItem, setSelectedItem] = useState(null)
-  const meta  = CATEGORY_META[category] ?? { label: category, hasChart: true }
+  const meta    = CATEGORY_META[category] ?? { label: category, hasChart: true }
   const isJewel = category === 'jewel'
 
-  // ── 가격 데이터만 API에서 fetch ──────────────
+  // ── 가격 데이터 fetch (Layout에서 prefetch → 캐시 히트 시 즉시 반환) ──
   const { data: apiItems = [], isLoading: priceLoading, isError: priceError } = useQuery({
     queryKey: ['market-items', category],
     queryFn:  isJewel ? getJewelItems : () => getMarketItems(category),
     staleTime: 1000 * 60,
-    refetchInterval: 1000 * 60,  // ✅ 최적화: 1분 백그라운드 갱신
+    refetchInterval: 1000 * 60,  // ✅ 1분 백그라운드 자동 갱신
   })
 
-  // ✅ 최적화: O(1) 이름 기반 가격 조회용 맵 (배열 탐색 O(n) 대신)
+  // ✅ 최적화: O(1) 이름 기반 가격 조회용 맵
   const priceMap = useMemo(() =>
     Object.fromEntries(apiItems.map(item => [item.name, item])),
   [apiItems])
@@ -380,7 +409,6 @@ export default function MarketPage({ category }) {
   // ── 정적 목록 + API 가격 병합 + 정렬 ─────────
   const displayItems = useMemo(() => {
     const staticList = STATIC_ITEMS[category] ?? []
-
     const merged = staticList.map(staticItem => {
       const api = priceMap[staticItem.name] ?? {}
       return {
@@ -393,23 +421,19 @@ export default function MarketPage({ category }) {
         diff_pct:          api.diff_pct ?? null,
       }
     })
-
     // 각인서: 가격 내림차순 (가격 없는 항목은 맨 아래)
     if (category === 'engraving') {
       return merged.sort((a, b) =>
         (b.current_min_price ?? -1) - (a.current_min_price ?? -1)
       )
     }
-    // refine·life·jewel: 정적 목록 순서 유지
     return merged
   }, [category, priceMap])
 
   return (
-    // ✅ h-[calc(100vh-48px)]: 헤더(h-12=48px) 제외한 뷰포트를 정확히 채움
-    // ✅ overflow-hidden: 페이지 자체 스크롤 완전 차단 — 사이드바만 스크롤
     <div className="h-[calc(100vh-48px)] overflow-hidden bg-gray-950 text-white flex flex-col">
 
-      {/* ✅ MainPage와 동일한 스크롤바 스타일 */}
+      {/* MainPage와 동일한 스크롤바 스타일 */}
       <style>{`
         .market-scroll::-webkit-scrollbar { width: 3px; }
         .market-scroll::-webkit-scrollbar-track { background: transparent; }
@@ -422,17 +446,17 @@ export default function MarketPage({ category }) {
         }
       `}</style>
 
-      {/* 페이지 타이틀 — Layout 헤더와 동일한 max-w-[1400px] mx-auto px-8 */}
-      <div className="max-w-[1400px] mx-auto w-full px-8 pt-5 pb-3 border-b border-gray-800 flex items-center justify-between flex-shrink-0">
+      {/* 타이틀 — Layout 헤더와 동일한 max-w-[1400px] mx-auto px-8 */}
+      <div className="max-w-[1400px] mx-auto w-full px-8 pt-5 pb-3 border-b border-gray-800
+        flex items-center justify-between flex-shrink-0">
         <div>
           <h1 className="text-lg font-bold text-white">{meta.label} 시세</h1>
           <p className="text-xs text-gray-500 mt-0.5">
             {isJewel
-              ? '경매장 기준 최저가 · 차트 미제공'
-              : '거래소 기준 최저가 · 30일 히스토리 차트'}
+              ? '경매장 기준 최저가 · 1분 갱신'
+              : '거래소 기준 최저가 · 30일 히스토리 차트 · 1분 갱신'}
           </p>
         </div>
-        {/* 가격 로딩·오류 상태 — 목록은 항상 표시되므로 우측 상단 뱃지로만 표시 */}
         {priceLoading && (
           <span className="text-xs text-gray-500 animate-pulse">가격 불러오는 중...</span>
         )}
@@ -441,74 +465,62 @@ export default function MarketPage({ category }) {
         )}
       </div>
 
-      {/* 본문: 사이드바 + 메인 패널 — 타이틀과 동일한 max-w 컨테이너 */}
+      {/* 본문 컨테이너 */}
       <div className="max-w-[1400px] mx-auto w-full flex flex-1 min-h-0 overflow-hidden">
 
-        {/* ── 사이드바 ─────────────────────────── */}
-        <aside className="w-72 flex-shrink-0 border-r border-gray-800 flex flex-col overflow-hidden">
-          {/* ✅ 목록은 API와 무관하게 즉시 표시 */}
-          <div className="market-scroll flex-1 overflow-y-auto py-2 px-2 space-y-0.5">
-            {displayItems.map((item) => (
-              <ItemRow
-                key={item.name}
-                item={item}
-                selected={selectedItem?.name === item.name}
-                onClick={() =>
-                  setSelectedItem(prev =>
-                    prev?.name === item.name ? null : item
-                  )
-                }
-              />
-            ))}
-          </div>
-        </aside>
+        {isJewel ? (
+          /* ── 보석: 2열 그리드 (사이드바·차트 없음) ── */
+          <JewelGrid items={displayItems} />
 
-        {/* ── 메인 패널 ─────────────────────────── */}
-        <main className="flex-1 flex flex-col min-w-0">
-          {!selectedItem ? (
-            <div className="flex-1 flex flex-col items-center justify-center gap-2">
-              <p className="text-gray-400 text-sm">왼쪽 목록에서 아이템을 선택하세요</p>
-              {!isJewel && (
-                <p className="text-gray-600 text-xs">
-                  선택 시 30일 가격 · 판매량 차트를 확인할 수 있습니다
-                </p>
-              )}
-            </div>
-          ) : (
-            <>
-              {/* 선택 아이템 헤더 */}
-              <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-800">
-                {selectedItem.icon && (
-                  <img
-                    src={selectedItem.icon}
-                    alt={selectedItem.name}
-                    className="w-10 h-10 rounded-lg border border-gray-700 object-cover"
+        ) : (
+          /* ── 재련·생활·각인서: 사이드바 + 차트 ─────── */
+          <>
+            <aside className="w-72 flex-shrink-0 border-r border-gray-800 flex flex-col overflow-hidden">
+              <div className="market-scroll flex-1 overflow-y-auto py-2 px-2 space-y-0.5">
+                {displayItems.map((item) => (
+                  <ItemRow
+                    key={item.name}
+                    item={item}
+                    selected={selectedItem?.name === item.name}
+                    onClick={() =>
+                      setSelectedItem(prev => prev?.name === item.name ? null : item)
+                    }
                   />
-                )}
-                <div>
-                  <p className="text-base font-bold text-white">{selectedItem.name}</p>
-                  <p className="text-sm text-amber-300 font-medium mt-0.5">
-                    {formatGold(selectedItem.current_min_price)} G
-                  </p>
-                </div>
-                <div className="ml-auto">
-                  <DiffBadge diff={selectedItem.diff} diffPct={selectedItem.diff_pct} />
-                </div>
+                ))}
               </div>
+            </aside>
 
-              {/* 차트 or 미제공 안내 */}
-              {meta.hasChart
-                ? <ChartPanel item={selectedItem} />
-                : (
-                  <div className="flex-1 flex flex-col items-center justify-center gap-2">
-                    <p className="text-gray-400 text-sm">보석은 경매장 거래 특성상</p>
-                    <p className="text-gray-400 text-sm">가격 히스토리 차트를 제공하지 않습니다</p>
+            <main className="flex-1 flex flex-col min-w-0">
+              {!selectedItem ? (
+                <div className="flex-1 flex flex-col items-center justify-center gap-2">
+                  <p className="text-gray-400 text-sm">왼쪽 목록에서 아이템을 선택하세요</p>
+                  <p className="text-gray-600 text-xs">선택 시 30일 가격 · 판매량 차트를 확인할 수 있습니다</p>
+                </div>
+              ) : (
+                <>
+                  {/* 선택 아이템 헤더 */}
+                  <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-800">
+                    {selectedItem.icon && (
+                      <img src={selectedItem.icon} alt={selectedItem.name}
+                        className="w-10 h-10 rounded-lg border border-gray-700 object-cover" />
+                    )}
+                    <div>
+                      <p className="text-base font-bold text-white">{selectedItem.name}</p>
+                      {/* ✅ 가격 옆에 변동 뱃지 인라인 */}
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <p className="text-sm text-amber-300 font-medium">
+                          {formatGold(selectedItem.current_min_price)} G
+                        </p>
+                        <DiffBadge diff={selectedItem.diff} diffPct={selectedItem.diff_pct} />
+                      </div>
+                    </div>
                   </div>
-                )
-              }
-            </>
-          )}
-        </main>
+                  <ChartPanel item={selectedItem} />
+                </>
+              )}
+            </main>
+          </>
+        )}
       </div>
     </div>
   )
