@@ -81,6 +81,18 @@ def get_my_groups(fingerprint: str):
         print(f"[DEBUG] no group_ids found for user_id: {user_id}")
         return []
 
+    # ✅ 누락된 코드 복구
+    groups = (
+        supabase.table("groups")
+        .select("*")
+        .in_("id", group_ids)
+        .order("sort_order")
+        .execute()
+    ).data or []
+    print(f"[DEBUG] groups found: {[g['name'] for g in groups]}")
+
+    return [_build_group_with_members(g) for g in groups]
+
 
 @router.post("/", status_code=201)
 def create_group(payload: GroupCreate):
