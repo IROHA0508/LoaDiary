@@ -41,6 +41,7 @@ app.add_middleware(
 
 # 라우터 등록
 app.include_router(users.router, prefix="/api/users", tags = ["users"])
+app.include_router(groups.router, prefix="/api/groups", tags=["groups"])
 app.include_router(characters.router, prefix="/api/characters", tags = ["characters"])
 app.include_router(raids.router, prefix="/api/raids", tags = ["raids"])
 app.include_router(market.router, prefix="/api/market", tags=["market"])   # ← 추가

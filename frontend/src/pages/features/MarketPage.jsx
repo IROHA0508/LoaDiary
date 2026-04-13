@@ -195,15 +195,13 @@ const formatGold = (v) => (v == null ? '-' : numFmt.format(v))
    변동량 뱃지
    ───────────────────────────────────────────── */
 function DiffBadge({ diff, diffPct }) {
-  if (diff == null) return <span className="text-gray-600 text-xs">-</span>
-  const up    = diff > 0
-  const zero  = diff === 0
-  const color = zero ? 'text-gray-400' : up ? 'text-emerald-400' : 'text-red-400'
-  const arrow = zero ? '-' : up ? '▲' : '▼'
-  const pct   = diffPct != null ? ` (${Math.abs(diffPct).toFixed(1)}%)` : ''
+  // ✅ null이거나 변동 없음으로 표시
+  if (diff == null ) return <span className="text-gray-600 text-xs">-</span>
+  const up  = diff > 0
+  const pct = diffPct != null ? ` (${Math.abs(diffPct).toFixed(1)}%)` : ''
   return (
-    <span className={`text-xs font-medium ${color} whitespace-nowrap`}>
-      {arrow} {formatGold(Math.abs(diff))}{pct}
+    <span className={`text-xs font-medium ${up ? 'text-emerald-400' : 'text-red-400'} whitespace-nowrap`}>
+      {up ? '▲' : '▼'} {formatGold(Math.abs(diff))}{pct}
     </span>
   )
 }
@@ -398,12 +396,15 @@ export default function MarketPage({ category }) {
   useEffect(() => { setSelectedItem(null) }, [category])
 
   // ── 가격 데이터 fetch (Layout에서 prefetch → 캐시 히트 시 즉시 반환) ──
-  const { data: apiItems = [], isLoading: priceLoading, isError: priceError } = useQuery({
+  const { data: apiData = { items: [], updated_at: null }, isLoading: priceLoading, isError: priceError } = useQuery({
     queryKey: ['market-items', category],
     queryFn:  isJewel ? getJewelItems : () => getMarketItems(category),
     staleTime: 1000 * 60,
-    refetchInterval: 1000 * 60,  // ✅ 1분 백그라운드 자동 갱신
+    refetchInterval: 1000 * 60,
   })
+
+  const apiItems  = apiData.items ?? []
+  const updatedAt = apiData.updated_at ?? null
 
   // ✅ 최적화: O(1) 이름 기반 가격 조회용 맵
   const priceMap = useMemo(() =>
@@ -457,16 +458,28 @@ export default function MarketPage({ category }) {
           <h1 className="text-lg font-bold text-white">{meta.label} 시세</h1>
           <p className="text-xs text-gray-500 mt-0.5">
             {isJewel
-              ? '경매장 기준 최저가 · 1분 갱신'
-              : '거래소 기준 최저가 · 30일 히스토리 차트 · 1분 갱신'}
+              ? '경매장 기준 최저가 · 1분 갱신 · 변동량은 직전 1분 대비'
+              : '거래소 기준 최저가 · 30일 히스토리 차트 · 변동량은 직전 1분 대비'}
           </p>
         </div>
-        {priceLoading && (
-          <span className="text-xs text-gray-500 animate-pulse">가격 불러오는 중...</span>
-        )}
-        {priceError && !priceLoading && (
-          <span className="text-xs text-red-400">가격 조회 실패 · 잠시 후 재시도</span>
-        )}
+        <div className="text-right text-xs">
+          {priceLoading && (
+            <span className="text-gray-500 animate-pulse">가격 불러오는 중...</span>
+          )}
+          {priceError && !priceLoading && (
+            <span className="text-red-400">가격 조회 실패 · 잠시 후 재시도</span>
+          )}
+          {/* ✅ 마지막 갱신 시각 — Worker 응답에 updated_at 있을 때만 표시 */}
+          {updatedAt && !priceLoading && (
+            <span className="text-gray-600 block mt-0.5">
+              Last update: {new Date(updatedAt).toLocaleString('ko-KR', {
+                timeZone: 'Asia/Seoul',
+                year: 'numeric', month: '2-digit', day: '2-digit',
+                hour: '2-digit', minute: '2-digit', second: '2-digit',
+              })}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* 본문 컨테이너 */}
