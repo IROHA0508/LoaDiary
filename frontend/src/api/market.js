@@ -12,9 +12,10 @@ const normalize = (data) => ({
 export const getJewelItems     = () => fetch(`${WORKER_URL}/jewel`).then(r => r.json()).then(normalize)
 export const getEngravingItems = () => fetch(`${WORKER_URL}/engraving`).then(r => r.json()).then(normalize)
 
+// ✅ 모든 카테고리를 Worker에서 처리
 export const getMarketItems = (category) => {
   if (category === 'engraving') return getEngravingItems()
-  return client.get(`/api/market/${category}/items`).then(r => normalize(r.data))
+  return fetch(`${WORKER_URL}/${category}`).then(r => r.json()).then(normalize)
 }
 
 export const getMarketHistory = (itemId, grade) =>

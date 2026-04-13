@@ -195,8 +195,16 @@ const formatGold = (v) => (v == null ? '-' : numFmt.format(v))
    변동량 뱃지
    ───────────────────────────────────────────── */
 function DiffBadge({ diff, diffPct }) {
-  // ✅ null이거나 변동 없음으로 표시
-  if (diff == null ) return <span className="text-gray-600 text-xs">-</span>
+  if (diff == null) return <span className="text-gray-600 text-xs">-</span>
+  // ✅ diff=0이면 회색으로 표시
+  if (diff === 0) {
+    const pct = diffPct != null ? ` (${Math.abs(diffPct).toFixed(1)}%)` : ''
+    return (
+      <span className="text-xs font-medium text-gray-500 whitespace-nowrap">
+        - {formatGold(0)}{pct}
+      </span>
+    )
+  }
   const up  = diff > 0
   const pct = diffPct != null ? ` (${Math.abs(diffPct).toFixed(1)}%)` : ''
   return (

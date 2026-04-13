@@ -62,9 +62,7 @@ class GroupReorder(BaseModel):
 def get_my_groups(fingerprint: str):
     try:
         user_id = _resolve_user_id(fingerprint)
-        print(f"[DEBUG] resolved user_id: {user_id}")
-    except HTTPException as e:
-        print(f"[DEBUG] _resolve_user_id FAILED: {e.detail}")
+    except HTTPException:
         return []
 
     member_rows = (
@@ -73,15 +71,12 @@ def get_my_groups(fingerprint: str):
         .eq("user_id", user_id)
         .execute()
     ).data or []
-    print(f"[DEBUG] group_members rows: {member_rows}")
 
     group_ids = list({m["group_id"] for m in member_rows})
 
     if not group_ids:
-        print(f"[DEBUG] no group_ids found for user_id: {user_id}")
         return []
 
-    # ✅ 누락된 코드 복구
     groups = (
         supabase.table("groups")
         .select("*")
@@ -89,10 +84,8 @@ def get_my_groups(fingerprint: str):
         .order("sort_order")
         .execute()
     ).data or []
-    print(f"[DEBUG] groups found: {[g['name'] for g in groups]}")
 
     return [_build_group_with_members(g) for g in groups]
-
 
 @router.post("/", status_code=201)
 def create_group(payload: GroupCreate):
