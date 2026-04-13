@@ -58,12 +58,15 @@ class GroupReorder(BaseModel):
     fingerprint: str
     group_ids: List[str]
 
-# 내가 속한 그룹 리스트 조회
 @router.get("/{fingerprint}")
 def get_my_groups(fingerprint: str):
-    user_id = _resolve_user_id(fingerprint)
+    # 유저 미존재(온보딩 전 호출, race condition 등) 시 404 전파 대신 빈 배열 반환
+    try:
+        user_id = _resolve_user_id(fingerprint)
+    except HTTPException:
+        return []
 
-    # 1. 내가 포함된 group_id 찾기
+    # 1. 내가 멤버로 포함된 group_id 찾기
     member_rows = (
         supabase.table("group_members")
         .select("group_id")
@@ -71,11 +74,11 @@ def get_my_groups(fingerprint: str):
         .execute()
     ).data or []
 
-    group_ids = list(set(m["group_id"] for m in member_rows))
+    group_ids = list({m["group_id"] for m in member_rows})  # set comprehension으로 중복 제거
 
     if not group_ids:
         return []
-    
+
     # 2. 포함된 그룹들 조회
     groups = (
         supabase.table("groups")
@@ -117,15 +120,6 @@ def create_group(payload: GroupCreate):
 
     return _build_group_with_members(g)
 
-
-@router.patch("/{group_id}")
-def update_group_name(group_id: str, payload: GroupNameUpdate):
-    result = supabase.table("groups").update({"name": payload.name.strip()}).eq("id", group_id).execute()
-    if not result.data:
-        raise HTTPException(status_code=404, detail="그룹을 찾을 수 없습니다.")
-    return result.data[0]
-
-
 @router.patch("/reorder")
 def reorder_groups(payload: GroupReorder):
     user_id = _resolve_user_id(payload.fingerprint)
@@ -133,6 +127,12 @@ def reorder_groups(payload: GroupReorder):
         supabase.table("groups").update({"sort_order": i}).eq("id", group_id).eq("user_id", user_id).execute()
     return {"ok": True}
 
+@router.patch("/{group_id}")
+def update_group_name(group_id: str, payload: GroupNameUpdate):
+    result = supabase.table("groups").update({"name": payload.name.strip()}).eq("id", group_id).execute()
+    if not result.data:
+        raise HTTPException(status_code=404, detail="그룹을 찾을 수 없습니다.")
+    return result.data[0]
 
 @router.delete("/{group_id}", status_code=204)
 def delete_group(group_id: str):

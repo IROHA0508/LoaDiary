@@ -50,6 +50,12 @@ app.include_router(jewel.router, prefix="/api/jewel", tags=["jewel"])
 def root():
   return {"message" : "LoaDiary API 작동 중"}
 
+# favicon.ico 요청 무시 (브라우저 자동 요청으로 인한 404 로그 제거)
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    from fastapi.responses import Response
+    return Response(status_code=204)
+
 # 상태확인 엔드포인트 추가
 @app.api_route("/health", methods=["GET", "HEAD"])
 async def health_check():

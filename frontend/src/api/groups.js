@@ -1,7 +1,13 @@
 import client, { slowClient } from './client'
 
 export const getMyGroups = (fingerprint) =>
-  client.get(`/api/groups/${fingerprint}`).then(r => r.data)
+  client.get(`/api/groups/${fingerprint}`)
+    .then(r => r.data)
+    .catch(err => {
+      // 유저 미존재(404)는 그룹 없음으로 처리 (온보딩 전 호출 등 방어)
+      if (err?.response?.status === 404) return []
+      throw err
+    })
 
 // name 없으면 자동 이름 (그룹1, 2…)
 export const createGroup = (fingerprint, name = null) =>
