@@ -189,12 +189,13 @@ async def get_market_item_history(item_id: int, item_grade: str) -> list:
   url = f"{BASE_URL}/markets/items/{item_id}/grade"
   params = {"itemGrade": item_grade}
   try:
-    async with httpx.AsyncClient(timeout=10.0) as client:
-      res = await client.get(url, headers=_headers(), params=params)
-      print(f"[history] item_id={item_id} grade={item_grade} status={res.status_code}")
-      if res.status_code == 200:
-        data = res.json()
-        return data if isinstance(data, list) else []
+    # ✅ follow_redirects=True — LoA API가 302 리다이렉트를 반환하는 경우 자동으로 따라감
+    async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+        res = await client.get(url, headers=_headers(), params=params)
+        print(f"[history] item_id={item_id} grade={item_grade} status={res.status_code}")
+        if res.status_code == 200:
+            data = res.json()
+            return data if isinstance(data, list) else []
   except Exception as e:
     print(f"[history] error: {e}")
   return []
