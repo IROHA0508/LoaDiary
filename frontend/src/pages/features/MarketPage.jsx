@@ -5,7 +5,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip,
   Legend, ResponsiveContainer,
 } from 'recharts'
-import { getMarketItems, getMarketHistory, getJewelItems } from '../../api/market'
+import { getMarketItems, getItemHistory, getJewelItems } from '../../api/market'
 
 /* ─────────────────────────────────────────────
    아이콘 상수
@@ -332,19 +332,15 @@ function ChartTooltip({ active, payload, label }) {
 /* ─────────────────────────────────────────────
    차트 패널 (재련·생활·각인서용)
    ───────────────────────────────────────────── */
-function ChartPanel({ item }) {
+function ChartPanel({ item, category }) {
   const { data: history = [], isLoading } = useQuery({
-    queryKey: ['market-history', item.id, item.grade],
-    queryFn:  () => getMarketHistory(item.id, item.grade),
-    staleTime: 1000 * 60 * 5,
-    enabled:   !!item.id,
+    // ✅ category + name 조합으로 캐시 키 설정
+    queryKey: ['item-history', category, item.name],
+    queryFn:  () => getItemHistory(category, item.name),
+    staleTime: 1000 * 60 * 60,  // 히스토리는 하루 단위 → 1시간 캐시
+    enabled:   !!item.name,
   })
 
-  if (!item.id) return (
-    <div className="flex-1 flex items-center justify-center">
-      <p className="text-gray-500 text-sm animate-pulse">가격 데이터 로딩 중...</p>
-    </div>
-  )
   if (isLoading) return (
     <div className="flex-1 flex items-center justify-center">
       <p className="text-gray-500 text-sm animate-pulse">히스토리 불러오는 중...</p>
@@ -536,7 +532,7 @@ export default function MarketPage({ category }) {
                       </div>
                     </div>
                   </div>
-                  <ChartPanel item={selectedItem} />
+                  <ChartPanel item={selectedItem} category={category} />
                 </>
               )}
             </main>

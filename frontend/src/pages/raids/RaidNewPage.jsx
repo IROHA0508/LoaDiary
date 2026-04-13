@@ -1,7 +1,11 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom"
+import { useQueryClient } from "@tanstack/react-query"
 import { useUser } from "../../hooks/useUser";
 import { createRaid } from "../../api/raids";
+import { getCharacters } from "../../api/characters";
+import { getMyGroups } from "../../api/groups";
+import { getUser } from "../../api/users";
 
 /* ─────────────────────────────────────────────
    카테고리
@@ -224,6 +228,7 @@ export default function RaidNewPage() {
   // 렌더링 확인용 디버그 코드
   // console.log('RaidNewPage render', window.location.pathname)
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { fingerprint } = useUser();
   const [step, setStep] = useState(1);
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -241,6 +246,28 @@ export default function RaidNewPage() {
   useEffect(() => {
     setFadeKey((k) => k + 1);
   }, [step]);
+
+  // step 4 진입 시 RaidDetailPage 독립 데이터 프리페치
+  // 사용자가 확인 화면을 보는 동안 백그라운드 로드
+  useEffect(() => {
+    if (step !== 4 || !fingerprint) return;
+
+    queryClient.prefetchQuery({
+      queryKey: ['characters', fingerprint],
+      queryFn: () => getCharacters(fingerprint),
+      staleTime: 1000 * 30,
+    });
+    queryClient.prefetchQuery({
+      queryKey: ['groups', fingerprint],
+      queryFn: () => getMyGroups(fingerprint),
+      staleTime: 1000 * 60,
+    });
+    queryClient.prefetchQuery({
+      queryKey: ['user', fingerprint],
+      queryFn: () => getUser(fingerprint),
+      staleTime: 1000 * 30,
+    });
+  }, [step, fingerprint]);
 
   const canNext = () => {
     if (step === 1) return !!form.raidId;
@@ -265,7 +292,7 @@ export default function RaidNewPage() {
   const handleSubmit = async () => {
     setIsSubmitting(true);
     try {
-      const data = await createRaid({
+      const newRaid = await createRaid({
         raid_id: form.raidId,
         raid_name: selectedRaid?.name,
         difficulty: form.difficulty,
@@ -273,7 +300,16 @@ export default function RaidNewPage() {
         created_by: fingerprint,
       });
 
-      navigate(`/raids/${data.id}`);
+      // ① MainPage가 복귀 시 API 없이 즉시 새 레이드를 보여주도록 캐시에 선 주입
+      queryClient.setQueryData(
+        ['allRaidsWithSlots', fingerprint],
+        (prev = []) => [{ ...newRaid, slots: [] }, ...prev]
+      );
+
+      // ② freshRaid를 state로 전달 → RaidDetailPage가 getRaid/getSlots 건너뜀
+      navigate(`/raids/${newRaid.id}`, {
+        state: { freshRaid: newRaid },
+      });
     } catch (e) {
       const message =
         e.response?.data?.detail ||

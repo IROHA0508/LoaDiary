@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useTransition } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { useUser } from "../../hooks/useUser";
 import { supabase } from "../../lib/supabase";
 import { getMyGroups } from '../../api/groups'
@@ -135,6 +136,8 @@ const RAID_NAMES = {
 export default function RaidDetailPage() {
   const { id: raidId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const queryClient = useQueryClient();
   const { fingerprint } = useUser();
 
   const [raid, setRaid] = useState(null);
@@ -270,13 +273,30 @@ export default function RaidDetailPage() {
 
     const load = async () => {
       try {
-        // getMembers 제거 — 멤버는 로컬에서 관리
+        // navigate state에 freshRaid가 있으면 서버 재조회 생략
+        const freshRaid = location.state?.freshRaid;
+
         const [raidData, slotsData, charsData, groupsData, myUserData] = await Promise.all([
-          API.getRaid(raidId),
-          API.getSlots(raidId),
-          API.getMyCharacters(fingerprint),
-          getMyGroups(fingerprint).catch(() => []),
-          getUser(fingerprint).catch(() => null),
+          // freshRaid: getRaid API 생략 (방금 만든 데이터를 다시 가져올 필요 없음)
+          freshRaid ? Promise.resolve(freshRaid) : API.getRaid(raidId),
+          // freshRaid: 새 레이드는 슬롯이 항상 빈 배열 (API 생략)
+          freshRaid ? Promise.resolve([]) : API.getSlots(raidId),
+          // fetchQuery: 프리페치 캐시가 있으면 즉시 반환, 없으면 실제 fetch
+          queryClient.fetchQuery({
+            queryKey: ['characters', fingerprint],
+            queryFn: () => API.getMyCharacters(fingerprint),
+            staleTime: 1000 * 30,
+          }),
+          queryClient.fetchQuery({
+            queryKey: ['groups', fingerprint],
+            queryFn: () => getMyGroups(fingerprint),
+            staleTime: 1000 * 60,
+          }).catch(() => []),
+          queryClient.fetchQuery({
+            queryKey: ['user', fingerprint],
+            queryFn: () => getUser(fingerprint),
+            staleTime: 1000 * 30,
+          }).catch(() => null),
         ]);
 
         setRaid(raidData);
