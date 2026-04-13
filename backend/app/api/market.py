@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Query
-from app.lostark import get_market_items, get_market_item_history
+from app.lostark import get_market_item_history
 
 router = APIRouter()
 
