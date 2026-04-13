@@ -191,9 +191,10 @@ async def get_market_item_history(item_id: int, item_grade: str) -> list:
   try:
     async with httpx.AsyncClient(timeout=10.0) as client:
       res = await client.get(url, headers=_headers(), params=params)
+      print(f"[history] item_id={item_id} grade={item_grade} status={res.status_code}")
       if res.status_code == 200:
         data = res.json()
         return data if isinstance(data, list) else []
-  except Exception:
-    pass
+  except Exception as e:
+    print(f"[history] error: {e}")
   return []

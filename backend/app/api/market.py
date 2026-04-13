@@ -8,7 +8,7 @@ router = APIRouter()
 async def get_history(item_id: int, grade: str = Query(...)):
   data = await get_market_item_history(item_id, grade)
   if not data:
-    raise []
+    return []
 
   return [
     {
