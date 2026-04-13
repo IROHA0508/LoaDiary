@@ -1,4 +1,4 @@
-import { useState, useMemo, memo } from 'react'
+import { useState, useMemo, memo, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   ComposedChart, Bar, Line,
@@ -291,14 +291,14 @@ function JewelGrid({ items }) {
   ], [items])
 
   return (
-    <div className="market-scroll flex-1 overflow-y-auto p-6">
+    <div className="market-scroll flex-1 overflow-y-auto p-6 flex flex-col items-center">
       {/* 열 헤더 */}
-      <div className="grid grid-cols-2 gap-3 mb-2 max-w-2xl">
+      <div className="grid grid-cols-2 gap-3 mb-2 w-full max-w-2xl">
         <p className="text-xs font-semibold text-gray-500 px-1">겁화</p>
         <p className="text-xs font-semibold text-gray-500 px-1">작열</p>
       </div>
       {/* 아이템 행 */}
-      <div className="space-y-2 max-w-2xl">
+      <div className="space-y-2 w-full max-w-2xl">
         {rows.map((row, i) => (
           <div key={i} className="grid grid-cols-2 gap-3">
             <JewelCard item={row[0]} />
@@ -392,6 +392,10 @@ export default function MarketPage({ category }) {
   const [selectedItem, setSelectedItem] = useState(null)
   const meta    = CATEGORY_META[category] ?? { label: category, hasChart: true }
   const isJewel = category === 'jewel'
+
+  // ✅ 드롭다운으로 카테고리 변경 시 선택 아이템 초기화
+  // category prop이 바뀔 때마다 실행 — 이전 카테고리의 차트가 남아있지 않도록
+  useEffect(() => { setSelectedItem(null) }, [category])
 
   // ── 가격 데이터 fetch (Layout에서 prefetch → 캐시 히트 시 즉시 반환) ──
   const { data: apiItems = [], isLoading: priceLoading, isError: priceError } = useQuery({
