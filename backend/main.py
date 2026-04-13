@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from app.api import users, characters, raids, groups
 from app.db.supabase_client import check_connection
 from app.api import market, jewel
+from fastapi.responses import JSONResponse
 
 # 서버 시작시 DB연결 확인 추가
 @asynccontextmanager
@@ -51,5 +52,10 @@ def root():
 
 # 상태확인 엔드포인트 추가
 @app.api_route("/health", methods=["GET", "HEAD"])
-def health_check():
-    return {"status": "healthy"}
+async def health_check():
+    db_ok = await check_connection()
+    status_code = 200 if db_ok else 503
+    return JSONResponse(
+       content = {"status" : "healthy" if db_ok else "degraded", "db" : db_ok},
+       status_code = status_code,
+    )

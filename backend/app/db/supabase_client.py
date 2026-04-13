@@ -18,6 +18,7 @@ async def check_connection() -> None:
   try:
     supabase.table("users").select("id").limit(1).execute()
     print("✅ Supabase 연결 성공")
+    return True
   except Exception as e:
     print(f"❌ Supabase 연결 실패: {e}")
-    raise
+    raise False
