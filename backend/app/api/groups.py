@@ -60,35 +60,26 @@ class GroupReorder(BaseModel):
 
 @router.get("/{fingerprint}")
 def get_my_groups(fingerprint: str):
-    # 유저 미존재(온보딩 전 호출, race condition 등) 시 404 전파 대신 빈 배열 반환
     try:
         user_id = _resolve_user_id(fingerprint)
-    except HTTPException:
+        print(f"[DEBUG] resolved user_id: {user_id}")
+    except HTTPException as e:
+        print(f"[DEBUG] _resolve_user_id FAILED: {e.detail}")
         return []
 
-    # 1. 내가 멤버로 포함된 group_id 찾기
     member_rows = (
         supabase.table("group_members")
         .select("group_id")
         .eq("user_id", user_id)
         .execute()
     ).data or []
+    print(f"[DEBUG] group_members rows: {member_rows}")
 
-    group_ids = list({m["group_id"] for m in member_rows})  # set comprehension으로 중복 제거
+    group_ids = list({m["group_id"] for m in member_rows})
 
     if not group_ids:
+        print(f"[DEBUG] no group_ids found for user_id: {user_id}")
         return []
-
-    # 2. 포함된 그룹들 조회
-    groups = (
-        supabase.table("groups")
-        .select("*")
-        .in_("id", group_ids)
-        .order("sort_order")
-        .execute()
-    ).data or []
-
-    return [_build_group_with_members(g) for g in groups]
 
 
 @router.post("/", status_code=201)
