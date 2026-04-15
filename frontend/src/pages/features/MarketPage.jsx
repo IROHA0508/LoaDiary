@@ -333,26 +333,18 @@ function ChartTooltip({ active, payload, label }) {
    차트 패널 (재련·생활·각인서용)
    ───────────────────────────────────────────── */
 function ChartPanel({ item, category }) {
-  const { data: history = [], isLoading } = useQuery({
-    // ✅ category + name 조합으로 캐시 키 설정
+  // ✅ 모든 훅을 최상단에 선언 — 조기 return 이전에 위치해야 함 (React error #310 방지)
+  const { data: rawHistory, isLoading } = useQuery({
     queryKey: ['item-history', category, item.name],
     queryFn:  () => getItemHistory(category, item.name),
-    staleTime: 1000 * 60 * 60,  // 히스토리는 하루 단위 → 1시간 캐시
+    staleTime: 1000 * 60 * 60,
     enabled:   !!item.name,
   })
 
-  if (isLoading) return (
-    <div className="flex-1 flex items-center justify-center">
-      <p className="text-gray-500 text-sm animate-pulse">히스토리 불러오는 중...</p>
-    </div>
-  )
-  if (!history.length) return (
-    <div className="flex-1 flex items-center justify-center">
-      <p className="text-gray-500 text-sm">히스토리 데이터가 없습니다.</p>
-    </div>
-  )
+  // ✅ Worker 응답이 배열이 아닌 경우(에러 객체 등) 방어
+  const history = Array.isArray(rawHistory) ? rawHistory : []
 
-  // ✅ 최적화: useMemo — history 변경 시에만 재계산
+  // ✅ useMemo는 반드시 조기 return 전에 선언
   const chartData = useMemo(() =>
     [...history]
       .sort((a, b) => a.date.localeCompare(b.date))
@@ -362,6 +354,18 @@ function ChartPanel({ item, category }) {
         판매량: row.trade_count,
       })),
   [history])
+
+  // ✅ 조기 return은 훅 선언 이후에만
+  if (isLoading) return (
+    <div className="flex-1 flex items-center justify-center">
+      <p className="text-gray-500 text-sm animate-pulse">히스토리 불러오는 중...</p>
+    </div>
+  )
+  if (!history.length) return (
+    <div className="flex-1 flex items-center justify-center">
+      <p className="text-gray-500 text-sm">히스토리 수집 중입니다 · 내일부터 확인 가능합니다</p>
+    </div>
+  )
 
   return (
     <div className="flex-1 min-h-0 p-4">
