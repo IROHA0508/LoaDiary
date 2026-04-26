@@ -334,7 +334,7 @@ function ChartTooltip({ active, payload, label }) {
    ───────────────────────────────────────────── */
 function ChartPanel({ item, category }) {
   // ✅ 모든 훅을 최상단에 선언 — 조기 return 이전에 위치해야 함 (React error #310 방지)
-  const { data: rawHistory, isLoading } = useQuery({
+  const { data: rawHistory, isLoading, isError } = useQuery({
     queryKey: ['item-history', category, item.name],
     queryFn:  () => getItemHistory(category, item.name),
     staleTime: 1000 * 60 * 60,
