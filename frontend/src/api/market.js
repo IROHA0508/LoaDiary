@@ -19,6 +19,7 @@ export const getMarketItems = (category) => {
 export const getItemHistory = (category, itemName) =>
   fetch(`${WORKER_URL}/history?category=${category}&name=${encodeURIComponent(itemName)}`)
     .then(r => r.json())
+    .catch(() => [])
 
 // 하위 호환성 유지 (기존 코드에서 사용 중인 경우 대비)
 export const getMarketHistory = (itemId, grade, category, itemName) =>

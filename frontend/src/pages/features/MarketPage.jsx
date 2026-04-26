@@ -339,6 +339,8 @@ function ChartPanel({ item, category }) {
     queryFn:  () => getItemHistory(category, item.name),
     staleTime: 1000 * 60 * 60,
     enabled:   !!item.name,
+
+    retry: false
   })
 
   // ✅ Worker 응답이 배열이 아닌 경우(에러 객체 등) 방어
@@ -359,6 +361,11 @@ function ChartPanel({ item, category }) {
   if (isLoading) return (
     <div className="flex-1 flex items-center justify-center">
       <p className="text-gray-500 text-sm animate-pulse">히스토리 불러오는 중...</p>
+    </div>
+  )
+  if (isError) return (
+    <div className="flex-1 flex items-center justify-center">
+      <p className="text-gray-500 text-sm">히스토리를 불러오지 못했습니다</p>
     </div>
   )
   if (!history.length) return (
