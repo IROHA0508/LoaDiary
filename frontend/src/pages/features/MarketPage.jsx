@@ -336,7 +336,7 @@ function ChartPanel({ item, category }) {
   // ✅ 모든 훅을 최상단에 선언 — 조기 return 이전에 위치해야 함 (React error #310 방지)
   const { data: rawHistory, isLoading, isError } = useQuery({
     queryKey: ['item-history', category, item.name],
-    queryFn:  () => getItemHistory(category, item.name),
+    queryFn:  () => getItemHistory(category, item.name, item.id, item.grade),
     staleTime: 1000 * 60 * 60,
     enabled:   !!item.name,
 
@@ -346,16 +346,18 @@ function ChartPanel({ item, category }) {
   // ✅ Worker 응답이 배열이 아닌 경우(에러 객체 등) 방어
   const history = Array.isArray(rawHistory) ? rawHistory : []
 
-  // ✅ useMemo는 반드시 조기 return 전에 선언
   const chartData = useMemo(() =>
     [...history]
       .sort((a, b) => a.date.localeCompare(b.date))
       .map((row) => ({
         date:   row.date.slice(5),
         최저가: row.avg_price,
-        판매량: row.trade_count,
+        판매량: row.trade_count,  // null이면 Bar 자동 미표시
       })),
-  [history])
+    [history])
+
+  // ✅ 판매량 데이터가 하나라도 있는지 확인
+  const hasTradeCount = chartData.some(d => d.판매량 != null)
 
   // ✅ 조기 return은 훅 선언 이후에만
   if (isLoading) return (
@@ -382,11 +384,15 @@ function ChartPanel({ item, category }) {
           <XAxis dataKey="date" tick={{ fill: '#9ca3af', fontSize: 11 }} tickLine={false} axisLine={{ stroke: '#374151' }} />
           <YAxis yAxisId="gold" orientation="left" tick={{ fill: '#f59e0b', fontSize: 11 }}
             tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}K` : v} tickLine={false} axisLine={false} />
-          <YAxis yAxisId="trade" orientation="right" tick={{ fill: '#60a5fa', fontSize: 11 }}
-            tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(1)}K` : v} tickLine={false} axisLine={false} />
+          {hasTradeCount && (
+            <YAxis yAxisId="trade" orientation="right" tick={{ fill: '#60a5fa', fontSize: 11 }}
+              tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(1)}K` : v} tickLine={false} axisLine={false} />
+          )}
           <Tooltip content={<ChartTooltip />} />
           <Legend wrapperStyle={{ fontSize: 12, color: '#9ca3af' }} />
-          <Bar yAxisId="trade" dataKey="판매량" fill="#3b82f6" fillOpacity={0.35} radius={[2, 2, 0, 0]} maxBarSize={20} />
+          {hasTradeCount && (
+            <Bar yAxisId="trade" dataKey="판매량" fill="#3b82f6" fillOpacity={0.35} radius={[2, 2, 0, 0]} maxBarSize={20} />
+          )}
           <Line yAxisId="gold" type="monotone" dataKey="최저가" stroke="#f59e0b" strokeWidth={2} dot={false} activeDot={{ r: 4, fill: '#f59e0b' }} />
         </ComposedChart>
       </ResponsiveContainer>

@@ -15,11 +15,18 @@ export const getMarketItems = (category) => {
   return fetch(`${WORKER_URL}/${category}`).then(r => r.json()).then(normalize)
 }
 
-// ✅ 모든 카테고리 히스토리를 Worker KV에서 조회 (백엔드 불필요)
-export const getItemHistory = (category, itemName) =>
-  fetch(`${WORKER_URL}/history?category=${category}&name=${encodeURIComponent(itemName)}`)
-    .then(r => r.json())
+// ✅ 재련·생활: 백엔드 API (TradeCount 포함)
+// ✅ 각인서: Worker KV (백엔드 미제공)
+export const getItemHistory = (category, itemName, itemId, grade) => {
+  if (category === 'engraving') {
+    return fetch(`${WORKER_URL}/history?category=${category}&name=${encodeURIComponent(itemName)}`)
+      .then(r => r.json())
+      .catch(() => [])
+  }
+  return client.get(`/api/market/history/${itemId}`, { params: { grade } })
+    .then(r => r.data)
     .catch(() => [])
+}
 
 // 하위 호환성 유지 (기존 코드에서 사용 중인 경우 대비)
 export const getMarketHistory = (itemId, grade, category, itemName) =>
