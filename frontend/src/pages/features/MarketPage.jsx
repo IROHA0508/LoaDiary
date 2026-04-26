@@ -377,9 +377,9 @@ function ChartPanel({ item, category }) {
   )
 
   return (
-    <div className="flex-1 min-h-0 p-4">
-      <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={chartData} margin={{ top: 8, right: 16, left: 8, bottom: 4 }}>
+    <div className="flex-1 p-4" style={{ minHeight: 0, minWidth: 0 }}>
+      <ResponsiveContainer width="100%" height="100%" minHeight={200}>
+        <ComposedChart data={chartData} margin={{ top: 8, right: hasTradeCount ? 40 : 8, left: 8, bottom: 4 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
           <XAxis dataKey="date" tick={{ fill: '#9ca3af', fontSize: 11 }} tickLine={false} axisLine={{ stroke: '#374151' }} />
           <YAxis yAxisId="gold" orientation="left" tick={{ fill: '#f59e0b', fontSize: 11 }}
