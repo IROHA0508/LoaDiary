@@ -191,14 +191,18 @@ async def get_market_item_history(item_id: int, item_grade: str) -> list:
   try:
     # ✅ follow_redirects=True — LoA API가 302 리다이렉트를 반환하는 경우 자동으로 따라감
     async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
-        res = await client.get(url, headers=_headers(), params=params)
-        print(f"[history] item_id={item_id} grade={item_grade} status={res.status_code}")
-        if res.status_code == 200:
-          try:
-            data = res.json()
-            return data if isinstance(data, list) else []
-          except Exception as e:
-            return []
+      res = await client.get(url, headers=_headers(), params=params)
+      print(f"[history] item_id={item_id} grade={item_grade} status={res.status_code}")
+      if res.status_code == 200:
+        try:
+          text = res.text
+          print(f"[history] response text (first 200): {text[:200]}")
+          data = res.json()
+          print(f"[history] parsed ok, count={len(data) if isinstance(data, list) else 'not_list'}")
+          return data if isinstance(data, list) else []
+        except Exception as e:
+          print(f"[history] json parse error: {e}, text={res.text[:100]}")
+          return []
 
   except Exception as e:
     print(f"[history] error: {e}")
