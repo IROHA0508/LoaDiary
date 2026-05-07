@@ -345,15 +345,15 @@ function ChartPanel({ item, category }) {
 
   // ✅ Worker 응답이 배열이 아닌 경우(에러 객체 등) 방어
   const history = Array.isArray(rawHistory) ? rawHistory : []
-
   const chartData = useMemo(() =>
-    [...history]
-      .sort((a, b) => a.date.localeCompare(b.date))
-      .map((row) => ({
-        date:   row.date.slice(5),
-        최저가: row.avg_price,
-        판매량: row.trade_count,  // null이면 Bar 자동 미표시
-      })),
+      [...history]
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .map((row) => ({
+          date:   row.date.slice(5),
+          // ✅ avg_price가 0이거나 null이면 null로 처리 → 라인에서 해당 날짜 스킵
+          최저가: row.avg_price > 0 ? row.avg_price : null,
+          판매량: row.trade_count > 0 ? row.trade_count : null,
+        })),
     [history])
 
   // ✅ 판매량 데이터가 하나라도 있는지 확인
@@ -393,7 +393,8 @@ function ChartPanel({ item, category }) {
           {hasTradeCount && (
             <Bar yAxisId="trade" dataKey="판매량" fill="#3b82f6" fillOpacity={0.35} radius={[2, 2, 0, 0]} maxBarSize={20} />
           )}
-          <Line yAxisId="gold" type="monotone" dataKey="최저가" stroke="#f59e0b" strokeWidth={2} dot={false} activeDot={{ r: 4, fill: '#f59e0b' }} />
+          {/* ✅ connectNulls: 0값 날짜를 건너뛰고 연결 */}
+          <Line yAxisId="gold" type="monotone" dataKey="최저가" stroke="#f59e0b" strokeWidth={2} dot={false} activeDot={{ r: 4, fill: '#f59e0b' }} connectNulls={false} />
         </ComposedChart>
       </ResponsiveContainer>
     </div>
