@@ -394,7 +394,7 @@ function ChartPanel({ item, category }) {
             <Bar yAxisId="trade" dataKey="판매량" fill="#3b82f6" fillOpacity={0.35} radius={[2, 2, 0, 0]} maxBarSize={20} />
           )}
           {/* ✅ connectNulls: 0값 날짜를 건너뛰고 연결 */}
-          <Line yAxisId="gold" type="monotone" dataKey="최저가" stroke="#f59e0b" strokeWidth={2} dot={false} activeDot={{ r: 4, fill: '#f59e0b' }} connectNulls={false} />
+          <Line yAxisId="gold" type="monotone" dataKey="최저가" stroke="#f59e0b" strokeWidth={2} dot={false} activeDot={{ r: 4, fill: '#f59e0b' }} connectNulls={true} />
         </ComposedChart>
       </ResponsiveContainer>
     </div>
