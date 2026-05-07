@@ -336,11 +336,7 @@ function ChartPanel({ item, category }) {
   // ✅ 모든 훅을 최상단에 선언 — 조기 return 이전에 위치해야 함 (React error #310 방지)
   const { data: rawHistory, isLoading, isError } = useQuery({
     queryKey: ['item-history', category, item.name],
-    // queryFn:  () => getItemHistory(category, item.name, item.id, item.grade),
-    queryFn:  () => {
-      console.log('[ChartPanel]', { category, name: item.name, id: item.id, grade: item.grade })
-      return getItemHistory(category, item.name, item.id, item.grade)
-    },
+    queryFn:  () => getItemHistory(category, item.name, item.id),
     staleTime: 1000 * 60 * 60,
     enabled:   !!item.name,
 

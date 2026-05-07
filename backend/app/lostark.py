@@ -185,25 +185,24 @@ async def get_armory(character_name: str) -> dict:
 # ── 거래소 아이템 30일 히스토리 조회 (그래프용)
 # item_id   : Items[].Id 값
 # item_grade: Items[].Grade 값
-async def get_market_item_history(item_id: int, item_grade: str) -> list:
-  url = f"{BASE_URL}/markets/items/{item_id}/grade"
-  params = {"itemGrade": item_grade}
+async def get_market_item_history(item_id: int) -> list:
+  # ✅ /grade 없이 itemId만으로 Stats(Date, AvgPrice, TradeCount) 조회
+  url = f"{BASE_URL}/markets/items/{item_id}"
   try:
-    # ✅ follow_redirects=True — LoA API가 302 리다이렉트를 반환하는 경우 자동으로 따라감
     async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
-      res = await client.get(url, headers=_headers(), params=params)
-      print(f"[history] item_id={item_id} grade={item_grade} status={res.status_code}")
+      res = await client.get(url, headers=_headers())
+      print(f"[history] item_id={item_id} status={res.status_code}")
       if res.status_code == 200:
-        try:
-          text = res.text
-          print(f"[history] response text (first 200): {text[:200]}")
-          data = res.json()
-          print(f"[history] parsed ok, count={len(data) if isinstance(data, list) else 'not_list'}")
-          return data if isinstance(data, list) else []
-        except Exception as e:
-          print(f"[history] json parse error: {e}, text={res.text[:100]}")
-          return []
-
+        data = res.json()
+        result = []
+        for obj in (data if isinstance(data, list) else []):
+          for stat in obj.get("Stats", []):
+            result.append({
+              "Date":       stat.get("Date", ""),
+              "AvgPrice":   stat.get("AvgPrice"),
+              "TradeCount": stat.get("TradeCount"),
+            })
+        return result
   except Exception as e:
     print(f"[history] error: {e}")
   return []

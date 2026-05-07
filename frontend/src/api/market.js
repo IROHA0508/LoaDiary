@@ -17,14 +17,16 @@ export const getMarketItems = (category) => {
 
 // ✅ 재련·생활: 백엔드 API (TradeCount 포함)
 // ✅ 각인서: Worker KV (백엔드 미제공)
-export const getItemHistory = (category, itemName, itemId, grade) => {
-  if (category === 'engraving') {
-    return fetch(`${WORKER_URL}/history?category=${category}&name=${encodeURIComponent(itemName)}`)
-      .then(r => r.json())
+export const getItemHistory = (category, itemName, itemId) => {
+  // ✅ 재련·생활: 백엔드 API (AvgPrice + TradeCount 제공)
+  if ((category === 'refine' || category === 'life') && itemId) {
+    return client.get(`/api/market/history/${itemId}`)
+      .then(r => r.data)
       .catch(() => [])
   }
-  return client.get(`/api/market/history/${itemId}`, { params: { grade } })
-    .then(r => r.data)
+  // 각인서·기타: Worker KV 스냅샷
+  return fetch(`${WORKER_URL}/history?category=${category}&name=${encodeURIComponent(itemName)}`)
+    .then(r => r.json())
     .catch(() => [])
 }
 
