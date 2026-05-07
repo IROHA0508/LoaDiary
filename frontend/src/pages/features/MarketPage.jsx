@@ -315,20 +315,25 @@ function JewelGrid({ items }) {
 /* ─────────────────────────────────────────────
    커스텀 Tooltip (차트용)
    ───────────────────────────────────────────── */
-function ChartTooltip({ active, payload, label }) {
-  if (!active || !payload?.length) return null
+function ChartTooltip({ active, payload, label, hasTradeCount }) {
+  if (!active || !label) return null
+  // ✅ 거래 없는 날: null → 0으로 표기
+  const priceVal = payload?.find(p => p.dataKey === '최저가')?.value ?? 0
+  const tradeVal = payload?.find(p => p.dataKey === '판매량')?.value ?? 0
   return (
     <div className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs shadow-lg">
       <p className="text-gray-400 mb-1">{label}</p>
-      {payload.map((p) => (
-        <p key={p.name} style={{ color: p.color }} className="font-medium">
-          {p.name}: {p.name === '최저가' ? formatGold(p.value) : numFmt.format(p.value)}
+      <p style={{ color: '#f59e0b' }} className="font-medium">
+        최저가: {formatGold(priceVal)}
+      </p>
+      {hasTradeCount && (
+        <p style={{ color: '#60a5fa' }} className="font-medium">
+          판매량: {numFmt.format(tradeVal)}
         </p>
-      ))}
+      )}
     </div>
   )
 }
-
 /* ─────────────────────────────────────────────
    차트 패널 (재련·생활·각인서용)
    ───────────────────────────────────────────── */
@@ -345,19 +350,44 @@ function ChartPanel({ item, category }) {
 
   // ✅ Worker 응답이 배열이 아닌 경우(에러 객체 등) 방어
   const history = Array.isArray(rawHistory) ? rawHistory : []
-  const chartData = useMemo(() =>
-      [...history]
-        .sort((a, b) => a.date.localeCompare(b.date))
-        .map((row) => ({
-          date:   row.date.slice(5),
-          // ✅ avg_price가 0이거나 null이면 null로 처리 → 라인에서 해당 날짜 스킵
-          최저가: row.avg_price > 0 ? row.avg_price : null,
-          판매량: row.trade_count > 0 ? row.trade_count : null,
-        })),
-    [history])
+  const chartData = useMemo(() => {
+      if (!history.length) return []
 
+      // ✅ API가 반환하지 않는 날짜(gap)를 null로 채워 x축을 연속으로 만듦
+      // → recharts가 gap 위치에서 인접 날짜 툴팁을 표시하는 현상 방지
+      const dataMap = Object.fromEntries(
+        history.map(row => [row.date, row])
+      )
+
+      const sorted = [...history].map(r => r.date).sort()
+      const start  = new Date(sorted[0])
+      const end    = new Date(sorted[sorted.length - 1])
+      const result = []
+
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        const dateStr = d.toISOString().slice(0, 10)
+        const row = dataMap[dateStr]
+        result.push({
+          date:   dateStr.slice(5),
+          최저가: row?.avg_price   > 0 ? row.avg_price   : null,
+          판매량: row?.trade_count > 0 ? row.trade_count : null,
+        })
+      }
+      return result
+    }, [history])
   // ✅ 판매량 데이터가 하나라도 있는지 확인
   const hasTradeCount = chartData.some(d => d.판매량 != null)
+
+  // ✅ 가격 Y축 범위 — 실제 변동폭이 잘 보이도록 padding 추가
+  const goldDomain = useMemo(() => {
+    const prices = chartData.map(d => d.최저가).filter(v => v != null)
+    if (!prices.length) return [0, 'auto']
+    const min   = Math.min(...prices)
+    const max   = Math.max(...prices)
+    const range = max - min || max * 0.1
+    const pad   = range * 0.2
+    return [Math.max(0, Math.floor(min - pad)), Math.ceil(max + pad)]
+  }, [chartData])
 
   // ✅ 조기 return은 훅 선언 이후에만
   if (isLoading) return (
@@ -383,12 +413,16 @@ function ChartPanel({ item, category }) {
           <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
           <XAxis dataKey="date" tick={{ fill: '#9ca3af', fontSize: 11 }} tickLine={false} axisLine={{ stroke: '#374151' }} />
           <YAxis yAxisId="gold" orientation="left" tick={{ fill: '#f59e0b', fontSize: 11 }}
-            tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}K` : v} tickLine={false} axisLine={false} />
+            // ✅ 0~9999: 그대로 / 10000이상: 만G 단위 (소수점 1자리)
+            tickFormatter={(v) => v >= 10000 ? `${(v / 10000).toFixed(1)}만` : numFmt.format(v)}
+            tickLine={false} axisLine={false}
+            domain={goldDomain} />
           {hasTradeCount && (
             <YAxis yAxisId="trade" orientation="right" tick={{ fill: '#60a5fa', fontSize: 11 }}
               tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(1)}K` : v} tickLine={false} axisLine={false} />
           )}
-          <Tooltip content={<ChartTooltip />} />
+          {/* ✅ hasTradeCount를 tooltip에 전달 */}
+          <Tooltip content={(props) => <ChartTooltip {...props} hasTradeCount={hasTradeCount} />} />
           <Legend wrapperStyle={{ fontSize: 12, color: '#9ca3af' }} />
           {hasTradeCount && (
             <Bar yAxisId="trade" dataKey="판매량" fill="#3b82f6" fillOpacity={0.35} radius={[2, 2, 0, 0]} maxBarSize={20} />
