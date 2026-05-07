@@ -18,13 +18,13 @@ export const getMarketItems = (category) => {
 // ✅ 재련·생활: 백엔드 API (TradeCount 포함)
 // ✅ 각인서: Worker KV (백엔드 미제공)
 export const getItemHistory = (category, itemName, itemId) => {
-  // ✅ 재련·생활: 백엔드 API (AvgPrice + TradeCount 제공)
-  if ((category === 'refine' || category === 'life') && itemId) {
+  // ✅ itemId가 있으면 모든 카테고리에서 백엔드 API 사용 (AvgPrice + TradeCount 포함)
+  if (itemId) {
     return client.get(`/api/market/history/${itemId}`)
       .then(r => r.data)
       .catch(() => [])
   }
-  // 각인서·기타: Worker KV 스냅샷
+  // itemId 없는 경우(보석 등) Worker KV 폴백
   return fetch(`${WORKER_URL}/history?category=${category}&name=${encodeURIComponent(itemName)}`)
     .then(r => r.json())
     .catch(() => [])
